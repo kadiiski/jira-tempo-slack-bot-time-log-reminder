@@ -26,7 +26,12 @@ async function executeCron() {
       return getSlackUserIdByEmail(email).then(userId => {
         const {displayName} = userData
         const directMessage = `Hello ${displayName}, please log your time for the following days: ${notLoggedDays.join(', ')}`
-        sendSlackMessage(userId, directMessage)
+
+        if (process.env.DEBUG === 'true') {
+          console.debug(`Sending message: ${directMessage} TO: ${email}`)
+        } else {
+          sendSlackMessage(userId, directMessage)
+        }
 
         if (ENABLE_WINNERS && notLoggedDays?.length >= WINNERS_MIN_DAYS) {
           winners.push({
@@ -53,7 +58,11 @@ async function executeCron() {
       return b.notLoggedDays - a.notLoggedDays
     }).map((item, index) => {
       // Push the invite.
-      invites.push(inviteToChannel(item.slackUserId, SLACK_CHANNEL_ID))
+      if (process.env.DEBUG === 'true') {
+        console.debug(`Inviting: ${item.email} to channel.`)
+      } else {
+        invites.push(inviteToChannel(item.slackUserId, SLACK_CHANNEL_ID))
+      }
 
       // Build the message row.
       const place = index + 1;
@@ -74,15 +83,26 @@ async function executeCron() {
       return `${place} place: <@${item.slackUserId}> with ${item?.notLoggedDays} days! ${icon}`;
     }).join('\n')
 
+    if (process.env.DEBUG === 'true') {
+      console.debug(`Processing invites...`)
+    }
     // After they were all invited - send the message to the channel.
     return Promise.all(invites).then(() => {
-      sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
+      if (process.env.DEBUG === 'true') {
+        console.debug(`Sending channel message:`, channelMessage)
+      } else {
+        sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
+      }
     })
   })
 }
 
-// executeCron().then(() => console.log('Success!'))
+if (process.env.DEBUG === 'true') {
+  executeCron().then(() => console.log('Success!'))
+  return;
+}
 
+const currentTime = new Date().toLocaleString()
 let cronStatus = 'online';
 let lastRunTime = 'never';
 // Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
@@ -108,6 +128,7 @@ const server = http.createServer((req, res) => {
   // Return the index.html file
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.write('<h1>Cron Job Status</h1>');
+  res.write(`<p>Current time: ${currentTime}</p>`);
   res.write(`<p>Runs: every day at 16:00</p>`);
   res.write(`<p>Status: ${cronStatus}</p>`);
   res.write(`<p>Last Run: ${lastRunTime}</p>`);
