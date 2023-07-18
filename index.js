@@ -1,6 +1,8 @@
 const {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteToChannel} = require('./utils/jira-utils')
 const cron = require('node-cron');
 const dotenv = require("dotenv")
+const http = require('http');
+
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
@@ -81,11 +83,36 @@ async function executeCron() {
 
 // executeCron().then(() => console.log('Success!'))
 
+let cronStatus = 'Running';
+let lastRunTime = 'never';
+
 // Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
 cron.schedule('0 15 * * 1-5', () => {
-  executeCron().then(() => {
-    console.log('Cron run success!')
-  }).catch(err => {
+  try {
+    executeCron().then(() => {
+      console.log('Cron run success!')
+    }).catch(err => {
+    });
 
-  });
+    // Update the last run time
+    lastRunTime = new Date().toLocaleString();
+  } catch (error) {
+    console.error('Cron job failed:', error);
+    cronStatus = 'Failed';
+  }
+});
+
+// Create a basic HTTP server
+const server = http.createServer((req, res) => {
+  // Return the index.html file
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.write('<h1>Cron Job Status</h1>');
+  res.write(`<p>Status: ${cronStatus}</p>`);
+  res.write(`<p>Last Run: ${lastRunTime}</p>`);
+  res.end();
+});
+
+// Start the server
+server.listen(process.env.PORT || 3000, () => {
+  console.log('Server started on port', process.env.PORT || 3000);
 });
