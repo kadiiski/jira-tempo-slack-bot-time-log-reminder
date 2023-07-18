@@ -83,11 +83,10 @@ async function executeCron() {
 
 // executeCron().then(() => console.log('Success!'))
 
-let cronStatus = 'Running';
+let cronStatus = 'online';
 let lastRunTime = 'never';
-
 // Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
-cron.schedule('0 15 * * 1-5', () => {
+cron.schedule('0 16 * * 1-5', () => {
   try {
     executeCron().then(() => {
       console.log('Cron run success!')
@@ -98,7 +97,7 @@ cron.schedule('0 15 * * 1-5', () => {
     lastRunTime = new Date().toLocaleString();
   } catch (error) {
     console.error('Cron job failed:', error);
-    cronStatus = 'Failed';
+    cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
   }
 });
 
@@ -107,6 +106,7 @@ const server = http.createServer((req, res) => {
   // Return the index.html file
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.write('<h1>Cron Job Status</h1>');
+  res.write(`<p>Runs: every day at 16:00</p>`);
   res.write(`<p>Status: ${cronStatus}</p>`);
   res.write(`<p>Last Run: ${lastRunTime}</p>`);
   res.end();
