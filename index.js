@@ -90,7 +90,9 @@ cron.schedule('0 16 * * 1-5', () => {
   try {
     executeCron().then(() => {
       console.log('Cron run success!')
-    }).catch(err => {
+    }).catch(error => {
+      console.error('Cron job failed:', error);
+      cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
     });
 
     // Update the last run time
