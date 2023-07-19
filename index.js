@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const dotenv = require("dotenv")
 const http = require('http');
-const executeCron = require('./utils/cron')
+const {executeCron} = require('./utils/cron')
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 

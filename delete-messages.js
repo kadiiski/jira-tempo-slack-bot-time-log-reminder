@@ -1,5 +1,6 @@
 const { WebClient } = require('@slack/web-api');
 const dotenv = require("dotenv")
+const {clearWinners} = require('./utils/cron')
 
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
@@ -31,8 +32,9 @@ const client = new WebClient(SLACK_TOKEN);
           console.log(`Failed to delete message:`, message)
         }
       }
+      clearWinners();
 
-      console.log('All messages deleted successfully.');
+      console.log('All messages deleted successfully and the winners array was cleared.');
     } else {
       console.error('There was an error retrieving channel history:', response.error);
     }

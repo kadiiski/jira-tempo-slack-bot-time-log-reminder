@@ -8,11 +8,12 @@ const WINNERS_MIN_DAYS = process.env.WINNERS_MIN_DAYS
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
+let winners = []
+
 // Function to execute every day
 async function executeCron() {
   if(process.env.DEBUG === 'true') console.log('Executing cron for emails:', EMAILS_LIST)
 
-  const winners = []
   for (const email of EMAILS_LIST) {
     if(process.env.DEBUG === 'true') console.log(`Handling user: ${email}`)
 
@@ -96,4 +97,8 @@ async function executeCron() {
   }
 }
 
-module.exports = executeCron
+const clearWinners = () => {
+  winners = []
+}
+
+module.exports = {executeCron, clearWinners}
