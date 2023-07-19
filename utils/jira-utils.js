@@ -17,6 +17,8 @@ const tempoBaseUrl = process.env.TEMPO_BASE_URL;
 // SLACK credentials.
 const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN;
 
+const MINIMUM_HOURS = process.env.MINIMUM_HOURS;
+
 let today = new Date();
 let firstDay = new Date(today.getFullYear(), today.getMonth(), 2).toISOString().split('T')[0];
 let lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -96,9 +98,18 @@ const getNotLoggedDaysForUser = (email) => {
         })
         .sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
 
-      const workLogDays = workLogs.map(log => log.startDate)
+      const hoursPerDay = {}
+      workLogs.map(workLog => {
+        hoursPerDay[workLog.startDate] = (hoursPerDay?.[workLog.startDate] || 0) + workLog.timeSpentInHours
+      })
+
+      // Will contain valid days in which the user has logged the proper amount of hours.
+      const validWorkLogDays = Object.keys(hoursPerDay).filter(date => {
+        return hoursPerDay[date] >= MINIMUM_HOURS
+      })
+
       // Here we have all valid working days for the period provided (firstDay - now)
-      const notLoggedDays = getBusinessDays().filter(day => !workLogDays.includes(day))
+      const notLoggedDays = getBusinessDays().filter(day => !validWorkLogDays.includes(day))
 
       return {notLoggedDays, userData}
     }).catch(error => {
