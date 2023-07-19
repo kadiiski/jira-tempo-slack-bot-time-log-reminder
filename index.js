@@ -90,7 +90,7 @@ async function executeCron() {
   if (process.env.DEBUG === 'true') {
     console.debug(`Sending channel message:`, channelMessage)
   } else {
-    sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
+    await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
   }
 }
 
