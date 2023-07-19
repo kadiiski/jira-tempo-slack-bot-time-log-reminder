@@ -13,27 +13,34 @@ const WINNERS_MIN_DAYS = process.env.WINNERS_MIN_DAYS
 
 // Function to execute every day
 async function executeCron() {
-  console.log('Executing cron for emails:', EMAILS_LIST)
+  if(process.env.DEBUG === 'true') console.log('Executing cron for emails:', EMAILS_LIST)
 
   const winners = []
   for (const email of EMAILS_LIST) {
+    if(process.env.DEBUG === 'true') console.log(`Handling user: ${email}`)
+
     const {notLoggedDays, userData} = await getNotLoggedDaysForUser(email)
     const slackUserId = await getSlackUserIdByEmail(email)
 
+    if(process.env.DEBUG === 'true') console.log(`Not logged days: ${notLoggedDays?.length || 0}`)
+
     if (!userData) {
-      if(process.env.DEBUG === 'true') {
-        console.log(`ERROR: can get getNotLoggedDaysForUser: ${email}`)
-      }
-      return
+      if(process.env.DEBUG === 'true') console.log(`ERROR: can get getNotLoggedDaysForUser: ${email}`)
+      continue
+    }
+
+    if (!notLoggedDays?.length) {
+      continue
     }
 
     const {displayName} = userData
     const directMessage = `Hello ${displayName}, please log your time for the following days: ${notLoggedDays.map(item => `\`${item}\``).join(', ')}`
 
-    if(process.env.DEBUG === 'true') {
-      console.log(`Sending message: ${directMessage} TO: ${email}`)
+    if(process.env.DEBUG === 'true') console.log(`Sending message: ${directMessage} TO: ${email}`)
+
+    if (process.env.TEST_MODE !== 'true') {
+      await sendSlackMessage(slackUserId, directMessage)
     }
-    await sendSlackMessage(slackUserId, directMessage)
 
     if(ENABLE_WINNERS && notLoggedDays?.length >= WINNERS_MIN_DAYS) {
       winners.push({
@@ -47,27 +54,27 @@ async function executeCron() {
 
   // Finish if no winners.
   if (!winners.length) {
-    return true
+    if(process.env.DEBUG === 'true') console.log('No winners!')
+    return
   }
 
   // Invite winners to channel.
   for (const winner of winners) {
-    if(process.env.DEBUG === 'true') {
-      console.debug(`Inviting: ${winner.email} to channel.`)
+    if(process.env.DEBUG === 'true') console.debug(`Inviting: ${winner.email} to channel.`)
+
+    if (process.env.TEST_MODE !== 'true') {
+      await inviteToChannel(winner.slackUserId, SLACK_CHANNEL_ID)
     }
-    await inviteToChannel(winner.slackUserId, SLACK_CHANNEL_ID)
   }
 
   // Make an object like {1: [], 2:[], ...} with the places.
   const winnerGroups = Object.fromEntries(winners
-    .sort((a,b) => b.notLoggedDays - a.notLoggedDays)
     .map(winner => [winner.notLoggedDays, []]))
 
   // Build winners groups.
-  winners
-    .map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
+  winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
 
-  const channelMessage = Object.keys(winnerGroups).map((count, index) => {
+  const channelMessage = Object.keys(winnerGroups).sort((a,b) => b - a).map((count, index) => {
     const people = winnerGroups?.[count].map(slackId => `<@${slackId}>`)
     // Build the message row.
     const place = index + 1;
@@ -87,10 +94,11 @@ async function executeCron() {
   }).join('\n\n')
 
   // Send the channel message.
-  if (process.env.DEBUG === 'true') {
-    console.debug(`Sending channel message:`, channelMessage)
+  if(process.env.DEBUG === 'true') console.debug(`Sending channel message:`, channelMessage)
+
+  if (process.env.TEST_MODE !== 'true') {
+    await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
   }
-  await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
 }
 
 // if (process.env.DEBUG === 'true') {

@@ -1,7 +1,23 @@
 # Tempo Time Logg Reminder App
 
-This is an npm app that integrates with Jira and Tempo to help users log their time. 
-It includes a simple cron job that reminds people with a Slack bot to log their time.
+This is an npm app that integrates with Jira and Tempo to help users log their time.
+
+This app is designed to automate reminders for users to log their time in Jira. 
+It uses a cron job that runs every day at a specific time (9:00 AM) to send Slack messages to users who have not logged their time. 
+
+The app also has an option to enable winners based on the number of days not logged and send a formatted message with the so-called "winners".
+The app reads a list of email addresses from the environment variable EMAIL_LIST and retrieves the not logged days for each user. 
+If there are any not logged days for a user, it sends a direct message to the user on Slack.
+
+If enabled, the app selects winners based on the minimum number of days (WINNERS_MIN_DAYS) set in the environment variable. 
+It then invites the winners to a Slack channel and sends a message with the winners to remind them.
+
+The app also provides a basic HTTP server that listens for requests. 
+By accessing the /runcron endpoint, the cron job can be manually triggered. 
+
+The server also displays the current status of the cron job, including the last run time, on the default endpoint.
+
+To use this app, you need to configure your environment variables, including the Jira email list, Slack channel ID, and other necessary options.
 You need to create the Slack Bot yourself and give him permissions to read user data, write and invite people to chanels.
 Of course if some permissions are missing - it will throw error so you can fix them.
 
