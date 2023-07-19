@@ -13,6 +13,8 @@ const WINNERS_MIN_DAYS = process.env.WINNERS_MIN_DAYS
 
 // Function to execute every day
 async function executeCron() {
+  console.log('Executing cron for emails:', EMAILS_LIST)
+
   const winners = []
   for (const email of EMAILS_LIST) {
     const {notLoggedDays, userData} = await getNotLoggedDaysForUser(email)
@@ -26,13 +28,12 @@ async function executeCron() {
     }
 
     const {displayName} = userData
-    const directMessage = `Hello ${displayName}, please log your time for the following days: ${notLoggedDays.join(', ')}`
+    const directMessage = `Hello ${displayName}, please log your time for the following days: ${notLoggedDays.map(item => `\`${item}\``).join(', ')}`
 
     if(process.env.DEBUG === 'true') {
       console.log(`Sending message: ${directMessage} TO: ${email}`)
-    } else {
-      await sendSlackMessage(slackUserId, directMessage)
     }
+    await sendSlackMessage(slackUserId, directMessage)
 
     if(ENABLE_WINNERS && notLoggedDays?.length >= WINNERS_MIN_DAYS) {
       winners.push({
@@ -53,9 +54,8 @@ async function executeCron() {
   for (const winner of winners) {
     if(process.env.DEBUG === 'true') {
       console.debug(`Inviting: ${winner.email} to channel.`)
-    } else {
-      await inviteToChannel(winner.slackUserId, SLACK_CHANNEL_ID)
     }
+    await inviteToChannel(winner.slackUserId, SLACK_CHANNEL_ID)
   }
 
   // Make an object like {1: [], 2:[], ...} with the places.
@@ -89,9 +89,8 @@ async function executeCron() {
   // Send the channel message.
   if (process.env.DEBUG === 'true') {
     console.debug(`Sending channel message:`, channelMessage)
-  } else {
-    await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
   }
+  await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
 }
 
 // if (process.env.DEBUG === 'true') {
