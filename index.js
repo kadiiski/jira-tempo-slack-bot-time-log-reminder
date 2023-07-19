@@ -145,6 +145,7 @@ const server = http.createServer((req, res) => {
     // Return the index.html file
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.write('<h1>Cron Job Status</h1>');
+    res.write(`<p>Debug: ${process.env.DEBUG}</p>`);
     res.write(`<p>Current time: ${currentTime}</p>`);
     res.write(`<p>Runs: every day at 16:00</p>`);
     res.write(`<p>Status: ${cronStatus}</p>`);
