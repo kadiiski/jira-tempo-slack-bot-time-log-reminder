@@ -1,7 +1,9 @@
 const axios = require('axios');
 const util = require('util')
 const {WebClient} = require("@slack/web-api");
-require("dotenv").config()
+const dotenv = require("dotenv");
+dotenv.config()
+dotenv.config({ path: `.env.local`, override: true });
 
 // JIRA credentials.
 const jiraEmail = process.env.JIRA_EMAIL
@@ -32,7 +34,7 @@ const getJiraUserByEmail = (email) => {
 
   return axios.request(config)
     .then(response => response?.data?.[0] || null)
-    .catch(error => console.error(util.inspect(error, false, null, true)));
+    .catch(error => console.error('ERROR: getJiraUserByEmail', email));
 }
 
 const getTempoWorkLogsByAccountId = (accountId) => {
@@ -47,7 +49,7 @@ const getTempoWorkLogsByAccountId = (accountId) => {
 
   return axios.request(config)
     .then(response => response.data)
-    .catch(error => console.error(util.inspect(error, false, null, true)));
+    .catch(error => console.error('ERROR: getTempoWorkLogsByAccountId', error?.response?.data));
 }
 
 const getBusinessDays = () => {
@@ -75,12 +77,11 @@ const getBusinessDays = () => {
 const getNotLoggedDaysForUser = (email) => {
   return getJiraUserByEmail(email).then(user => {
     if (!user) {
-      throw new Error('Missing user!')
+      return Promise.resolve(false)
     }
 
     const {accountId, emailAddress, displayName, avatarUrls} = user
     const userData = {accountId, emailAddress, displayName, avatar: avatarUrls['48x48']}
-    // console.log('userData', util.inspect(userData, false, null, true));
 
     return getTempoWorkLogsByAccountId(accountId).then(workLogs => {
       workLogs = workLogs?.results?.filter(workLog => {
@@ -94,15 +95,17 @@ const getNotLoggedDaysForUser = (email) => {
           return {timeSpentSeconds, timeSpentInHours: timeSpentSeconds/3600, startDate, description}
         })
         .sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
-      // console.log('workLogs', util.inspect(workLogs, false, null, true));
 
       const workLogDays = workLogs.map(log => log.startDate)
       // Here we have all valid working days for the period provided (firstDay - now)
       const notLoggedDays = getBusinessDays().filter(day => !workLogDays.includes(day))
-      // console.log('notLoggedDays', notLoggedDays)
 
       return {notLoggedDays, userData}
+    }).catch(error => {
+      console.error('ERROR: getNotLoggedDaysForUser > getJiraUserByEmail > getTempoWorkLogsByAccountId', error?.response?.data)
     })
+  }).catch(error => {
+      console.error('ERROR: getNotLoggedDaysForUser > getJiraUserByEmail', error?.response?.data)
   })
 }
 
@@ -116,7 +119,7 @@ async function getSlackUserIdByEmail(email) {
     // Extract the USER_ID from the response
     return response?.user?.id;
   } catch (error) {
-    console.error(util.inspect(error, false, null, true));
+    console.error('ERROR: getSlackUserIdByEmail', error);
     return null;
   }
 }
@@ -131,7 +134,7 @@ const sendSlackMessage = (id, message) => {
     text: message
   })
     .then(() => console.log('Notification sent successfully!'))
-    .catch(error => console.error(util.inspect(error, false, null, true)));
+    .catch(error => console.error('ERROR: sendSlackMessage', error));
 }
 
 const addBotToChannel = (channelId) => {
@@ -139,7 +142,7 @@ const addBotToChannel = (channelId) => {
     channel: channelId,
   })
     .then(() => console.log('Bot added to the channel successfully!'))
-    .catch(error => console.error(util.inspect(error, false, null, true)))
+    .catch(error => console.error('ERROR: addBotToChannel', error))
 }
 
 const inviteToChannel = (userId, channelId) => {
@@ -159,9 +162,9 @@ const inviteToChannel = (userId, channelId) => {
           channel: channelId,
           users: userId,
         }).then(() => true)
-          .catch(error => console.log(util.inspect(error, false, null, true)));
+          .catch(error => console.log('slackClient.conversations.invite', error));
       })
-      .catch(error => console.error(util.inspect(error, false, null, true)));
+      .catch(error => console.error('addBotToChannel', error));
   })
 }
 
