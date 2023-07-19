@@ -22,10 +22,14 @@ const client = new WebClient(SLACK_TOKEN);
 
       // Delete each message in the channel
       for (const message of messages) {
-        await client.chat.delete({
-          channel: SLACK_CHANNEL_ID,
-          ts: message.ts
-        });
+        try {
+          await client.chat.delete({
+            channel: SLACK_CHANNEL_ID,
+            ts: message.ts
+          });
+        } catch (e) {
+          console.log(`Failed to delete message:`, message)
+        }
       }
 
       console.log('All messages deleted successfully.');
