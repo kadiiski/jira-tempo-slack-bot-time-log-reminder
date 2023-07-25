@@ -24,7 +24,7 @@ let lastRunTime = 'never';
 // # │ │ │ │ │ │
 // # * * * * * *
 // Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
-const cronJob = cron.schedule('0 15 * * 1-5', () => {
+const cronJob = cron.schedule(process.env.CRON_TIME, () => {
   console.log('Starting cron...');
   try {
     executeCron().then(() => {
@@ -55,12 +55,14 @@ const server = http.createServer((req, res) => {
   } else {
     // Return the index.html file
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.write('<h1>Cron Job Status</h1>');
-    res.write(`<p>Debug: ${process.env.DEBUG}</p>`);
-    res.write(`<p>Current time: ${currentTime}</p>`);
-    res.write(`<p>Runs: every day at 16:00</p>`);
-    res.write(`<p>Status: ${cronStatus}</p>`);
-    res.write(`<p>Last Run: ${lastRunTime}</p>`);
+    res.write(`
+        <h1>Cron Job Status</h1>
+        <p>Debug: ${process.env.DEBUG}</p>
+        <p>Current time: ${currentTime}</p>
+        <p>Runs: every day at 16:00</p>
+        <p>Status: ${cronStatus}</p>
+        <p>Last Run: ${lastRunTime}</p>
+`);
     res.end();
   }
 });
