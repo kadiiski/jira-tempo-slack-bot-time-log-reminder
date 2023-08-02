@@ -1,7 +1,9 @@
 const axios = require('axios');
-const util = require('util')
 const {WebClient} = require("@slack/web-api");
 const dotenv = require("dotenv");
+const {getFirstDayOfMonth, getLastDayOfMonth, getBusinessDays} = require('./date')
+const {debug} = require("./debug");
+
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
@@ -19,9 +21,11 @@ const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN;
 
 const MINIMUM_HOURS = process.env.MINIMUM_HOURS;
 
-let today = new Date();
-let firstDay = new Date(today.getFullYear(), today.getMonth(), 2).toISOString().split('T')[0];
-let lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+// Initialize the Slack WebClient
+const slackClient = new WebClient(SLACK_TOKEN);
+
+debug('JIRA LOGS START:', getFirstDayOfMonth())
+debug('JIRA LOGS END:', getLastDayOfMonth())
 
 const getJiraUserByEmail = (email) => {
   let config = {
@@ -43,7 +47,7 @@ const getTempoWorkLogsByAccountId = (accountId) => {
   let config = {
     method: 'get',
     maxBodyLength: Infinity,
-    url: `${tempoBaseUrl}/4/worklogs/user/${accountId}?from=${firstDay}&to=${lastDay}&limit=5000`,
+    url: `${tempoBaseUrl}/4/worklogs/user/${accountId}?from=${getFirstDayOfMonth()}&to=${getLastDayOfMonth()}&limit=5000`,
     headers: {
       'Authorization': `Bearer ${tempoApiToken}`
     }
@@ -52,28 +56,6 @@ const getTempoWorkLogsByAccountId = (accountId) => {
   return axios.request(config)
     .then(response => response.data)
     .catch(error => console.error('ERROR: getTempoWorkLogsByAccountId', error?.response?.data));
-}
-
-const getBusinessDays = () => {
-  let businessDays = [];
-  const start = new Date(firstDay);
-  const end = new Date();
-
-  // If it's friday.
-  if (end.getDay() !== 5) {
-    // Remove the current day but NOT friday!
-    end.setDate(end.getDate() - 1);
-  }
-
-  while (start <= end) {
-    const dayOfWeek = start.getDay();
-    if(dayOfWeek !== 0 && dayOfWeek !== 6) {
-      businessDays.push(start.toISOString().split('T')[0])
-    }
-    start.setDate(start.getDate() + 1);
-  }
-
-  return businessDays;
 }
 
 const getNotLoggedDaysForUser = (email) => {
@@ -121,9 +103,6 @@ const getNotLoggedDaysForUser = (email) => {
 }
 
 async function getSlackUserIdByEmail(email) {
-  // Initialize the Slack WebClient
-  const slackClient = new WebClient(SLACK_TOKEN);
-
   try {
     // Use the users.lookupByEmail method to get the user information
     const response = await slackClient.users.lookupByEmail({ email });
@@ -135,10 +114,16 @@ async function getSlackUserIdByEmail(email) {
   }
 }
 
-// Initialize the Slack WebClient
-const slackClient = new WebClient(SLACK_TOKEN);
+const sendSlackMessage = async (id, message) => {
+  // Don't send the real message.
+  if(process.env.TEST_MODE === 'true' && process.env.ADMIN_EMAIL) {
+    // Set the ID to the admin ID.
+    id = await getSlackUserIdByEmail("ivaiylo.kadiyski@ffw.com")
+  } else if (process.env.TEST_MODE === 'true') {
+    // just stop it
+    return
+  }
 
-const sendSlackMessage = (id, message) => {
   // Send a direct message to the user using the chat.postMessage method
   slackClient.chat.postMessage({
     channel: id,
@@ -157,6 +142,11 @@ const addBotToChannel = (channelId) => {
 }
 
 const inviteToChannel = (userId, channelId) => {
+  // Don't send the real message.
+  if (process.env.TEST_MODE === 'true') {
+    return new Promise.resolve(true)
+  }
+
   // First make sure the bot is in the channel!
   return addBotToChannel(channelId).then(() => {
     // Send a direct message to the user using the chat.postMessage method
