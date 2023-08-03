@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const dotenv = require("dotenv")
 const http = require('http');
 const executeCron = require('./utils/cron')
+const {debug} = require("./utils/debug");
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
@@ -25,19 +26,19 @@ let lastRunTime = 'never';
 // # * * * * * *
 // Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
 const cronJob = cron.schedule(process.env.CRON_TIME, () => {
-  console.log('Starting cron...');
+  debug('Starting cron...');
   try {
     executeCron().then(() => {
-      console.log('Cron run success!')
+      debug('Cron run success!')
     }).catch(error => {
-      console.error('Cron job failed:', error);
+      debug('Cron job failed:', error);
       cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
     });
 
     // Update the last run time
     lastRunTime = new Date().toLocaleString();
   } catch (error) {
-    console.error('Cron job failed:', error);
+    debug('Cron job failed:', error);
     cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
   }
 });
@@ -49,7 +50,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/runcron') {
     // Manually trigger the cron job
     cronJob.now()
-    console.log('CRON STARTED!')
+    debug('CRON STARTED!')
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Cron job triggered manually');
   } else {
