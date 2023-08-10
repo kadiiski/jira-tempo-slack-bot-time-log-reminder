@@ -144,7 +144,7 @@ const addBotToChannel = (channelId) => {
 const inviteToChannel = (userId, channelId) => {
   // Don't send the real message.
   if (process.env.TEST_MODE === 'true') {
-    return new Promise.resolve().then(() => true)
+    return Promise.resolve(true)
   }
 
   // First make sure the bot is in the channel!
