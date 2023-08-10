@@ -24,9 +24,6 @@ const MINIMUM_HOURS = process.env.MINIMUM_HOURS;
 // Initialize the Slack WebClient
 const slackClient = new WebClient(SLACK_TOKEN);
 
-debug('JIRA LOGS START:', getFirstDayOfMonth())
-debug('JIRA LOGS END:', getLastDayOfMonth())
-
 const getJiraUserByEmail = (email) => {
   let config = {
     method: 'get',
