@@ -1,3 +1,5 @@
+const axios = require('axios');
+
 const getFormattedDate = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -32,37 +34,102 @@ const getEndDate = () => {
   return getFormattedDate(getDateLastDayOfMonth());
 }
 
-function isWorkingDay(date) {
+function incrementFormattedDate(formattedDate, incrementDays) {
+  let date = new Date(formattedDate);
+  date.setDate(date.getDate() + incrementDays);
+  return getFormattedDate(date);
+}
+
+async function getEaster(year) {
+  const fallbackDate = "2023-04-16";
+  return axios.get(`https://psdox.com/calendar/api/${year}`)
+    .then(response => {
+      if (response && response.data) {
+        // <grigorin>16.04.2023</grigorin>
+        let match = response.data.match(/<grigorin>([\d\.]+)<\/grigorin>/);
+        if (match) {
+          return match[1].split(".").reverse().join("-");
+        }
+      }
+      return fallbackDate;
+    })
+    .catch(error => {
+      console.error(`ERROR: getEaster: ${error.message}`);
+      if (error.response) {
+        console.error(`ERROR: getEaster status: ${error.response.status}`);
+        console.log(error.response.headers);
+        console.log(error.response.data);
+      }
+      else if (error.request) {
+        console.log(error.request);
+      }
+      return fallbackDate;
+    });
+}
+
+// Official public holidays in Bulgaria.
+const getPublicHolidays = (() => {
+  let publicHolidays;
+  return async () => {
+    if (publicHolidays) {
+      return publicHolidays;
+    }
+    let year = (new Date()).getFullYear();
+    let easterSunday = await getEaster(year);
+    publicHolidays = [
+      `${year}-01-01`,
+      `${year}-03-03`,
+      incrementFormattedDate(easterSunday, -2), // Good Friday.
+      incrementFormattedDate(easterSunday, +1), // Easter Monday.
+      `${year}-05-01`,
+      `${year}-05-06`,
+      `${year}-05-24`,
+      `${year}-09-06`,
+      `${year}-09-22`,
+      `${year}-11-01`,
+    ];
+    publicHolidays = [...publicHolidays, ...publicHolidays.reduce((extraHolidays, holiday) => {
+      let dayOfWeek = (new Date(holiday)).getDay();
+      if (dayOfWeek === 0) { // Sunday.
+        extraHolidays.push(incrementFormattedDate(holiday, +1));
+      }
+      if (dayOfWeek === 6) { // Saturday.
+        extraHolidays.push(incrementFormattedDate(holiday, +2));
+      }
+      return extraHolidays;
+    }, [])];
+    publicHolidays.push(`${year}-12-24`);
+    publicHolidays.push(`${year}-12-25`);
+    publicHolidays.push(`${year}-12-26`);
+    let dayOfWeekChristmasEve = (new Date(year, 11, 24)).getDay();
+    if (dayOfWeekChristmasEve === 0) { // Sunday 24th.
+      publicHolidays.push(`${year}-12-27`); // Wednesday 27th.
+    }
+    else if (dayOfWeekChristmasEve === 4) { // Thursday 24th.
+      // No need to add Sunday 27th, because it's Sunday.
+      publicHolidays.push(`${year}-12-28`); // Monday 28th.
+    }
+    else if (dayOfWeekChristmasEve === 5) { // Friday 24th.
+      publicHolidays.push(`${year}-12-27`); // Monday 27th.
+      publicHolidays.push(`${year}-12-28`); // Tuesday 28th.
+    }
+    else if (dayOfWeekChristmasEve === 6) { // Saturday 24th.
+      publicHolidays.push(`${year}-12-27`); // Tuesday 27th.
+      publicHolidays.push(`${year}-12-28`); // Wednesday 28th.
+    }
+    // Unique and sorted values.
+    publicHolidays = [...new Set(publicHolidays)].sort();
+    return publicHolidays;
+  }
+})();
+
+function isWorkingDay(date, { publicHolidays }) {
   const formattedDate = getFormattedDate(date);
   const dayOfWeek = date.getDay();
-  const year = date.getFullYear();
-  const nonWorkingDays = [
-    "XXXX-01-01",
-    "XXXX-03-03",
-    "XXXX-05-01",
-    "XXXX-05-06",
-    "XXXX-05-24",
-    "XXXX-09-06",
-    "XXXX-09-22",
-    "XXXX-11-01",
-    "XXXX-12-24",
-    "XXXX-12-25",
-    "XXXX-12-26",
-  ].map(date => date.replace("XXXX", year));
-  const nonWorkingMondays = nonWorkingDays.map(date => {
-    let dayPlus1 = String(Number(date.substring(-2))).padStart(2, "0");
-    return date.substring(0, -2) + dayPlus1;
-  });
-  // @TODO: Fix Christmas before Christmas if possible.
-  // @TODO: Fix easter by using <grigorin> value in API.
-  // API for BG Easter: "https://psdox.com/calendar/api/2023".
   if (dayOfWeek === 0 || dayOfWeek === 6) {
     return false;
   }
-  else if (nonWorkingDays.includes(formattedDate)) {
-    return false;
-  }
-  else if (dayOfWeek === 1 && nonWorkingMondays.includes(formattedDate)) {
+  else if (publicHolidays.includes(formattedDate)) {
     return false;
   }
   else {
@@ -70,7 +137,7 @@ function isWorkingDay(date) {
   }
 }
 
-const getBusinessDays = () => {
+const getBusinessDays = ({ publicHolidays = [] } = {}) => {
   let businessDays = [];
   const start = new Date(getStartDate());
   const end = new Date();
@@ -83,7 +150,7 @@ const getBusinessDays = () => {
 
   const current = new Date(start);
   while (current <= end) {
-    if (isWorkingDay(current)) {
+    if (isWorkingDay(current, { publicHolidays })) {
       businessDays.push(current.toISOString().split('T')[0])
     }
     current.setDate(current.getDate() + 1);
@@ -92,4 +159,4 @@ const getBusinessDays = () => {
   return businessDays;
 }
 
-module.exports = { getStartDate, getEndDate, getBusinessDays }
+module.exports = { getStartDate, getEndDate, getBusinessDays, getPublicHolidays }

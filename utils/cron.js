@@ -1,5 +1,5 @@
 const {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteToChannel} = require("./jira-utils");
-const {getBusinessDays, getStartDate, getEndDate} = require('./date')
+const {getBusinessDays, getStartDate, getEndDate, getPublicHolidays} = require('./date')
 const dotenv = require("dotenv");
 const {debug} = require("./debug");
 const EMAILS_LIST = (process.env.EMAIL_LIST || "").split(',').map(s => s.trim())
@@ -12,8 +12,9 @@ dotenv.config({ path: `.env.local`, override: true });
 
 // Function to execute every day
 async function executeCron() {
+  let publicHolidays = await getPublicHolidays();
   debug('Executing cron for emails:', EMAILS_LIST)
-  debug('Business days:', getBusinessDays())
+  debug('Business days:', getBusinessDays({publicHolidays}))
   debug('JIRA logs START:', getStartDate())
   debug('JIRA logs END:', getEndDate())
 

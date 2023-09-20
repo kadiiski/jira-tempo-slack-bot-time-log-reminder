@@ -1,7 +1,7 @@
 const axios = require('axios');
 const {WebClient} = require("@slack/web-api");
 const dotenv = require("dotenv");
-const {getStartDate, getEndDate, getBusinessDays} = require('./date')
+const {getStartDate, getEndDate, getBusinessDays, getPublicHolidays} = require('./date')
 const {debug} = require("./debug");
 
 dotenv.config()
@@ -64,7 +64,8 @@ const getNotLoggedDaysForUser = (email) => {
     const {accountId, emailAddress, displayName, avatarUrls} = user
     const userData = {accountId, emailAddress, displayName, avatar: avatarUrls['48x48']}
 
-    return getTempoWorkLogsByAccountId(accountId).then(workLogs => {
+    return getTempoWorkLogsByAccountId(accountId).then(async workLogs => {
+      let publicHolidays = await getPublicHolidays();
       workLogs = workLogs?.results?.filter(workLog => {
         const workLogDate = new Date(workLog?.startDate);
         const currentDate = new Date();
@@ -88,7 +89,7 @@ const getNotLoggedDaysForUser = (email) => {
       })
 
       // Here we have all valid working days for the period provided (firstDay - now)
-      const notLoggedDays = getBusinessDays().filter(day => !validWorkLogDays.includes(day))
+      const notLoggedDays = getBusinessDays({publicHolidays}).filter(day => !validWorkLogDays.includes(day))
 
       return {notLoggedDays, userData}
     }).catch(error => {
