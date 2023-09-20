@@ -1,7 +1,7 @@
 const axios = require('axios');
 const {WebClient} = require("@slack/web-api");
 const dotenv = require("dotenv");
-const {getFirstDayOfMonth, getLastDayOfMonth, getBusinessDays} = require('./date')
+const {getStartDate, getEndDate, getBusinessDays} = require('./date')
 const {debug} = require("./debug");
 
 dotenv.config()
@@ -44,7 +44,7 @@ const getTempoWorkLogsByAccountId = (accountId) => {
   let config = {
     method: 'get',
     maxBodyLength: Infinity,
-    url: `${tempoBaseUrl}/4/worklogs/user/${accountId}?from=${getFirstDayOfMonth()}&to=${getLastDayOfMonth()}&limit=5000`,
+    url: `${tempoBaseUrl}/4/worklogs/user/${accountId}?from=${getStartDate()}&to=${getEndDate()}&limit=5000`,
     headers: {
       'Authorization': `Bearer ${tempoApiToken}`
     }

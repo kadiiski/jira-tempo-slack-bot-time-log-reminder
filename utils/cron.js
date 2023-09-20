@@ -1,5 +1,5 @@
 const {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteToChannel} = require("./jira-utils");
-const {getBusinessDays, getFirstDayOfMonth, getLastDayOfMonth} = require('./date')
+const {getBusinessDays, getStartDate, getEndDate} = require('./date')
 const dotenv = require("dotenv");
 const {debug} = require("./debug");
 const EMAILS_LIST = (process.env.EMAIL_LIST || "").split(',').map(s => s.trim())
@@ -14,8 +14,8 @@ dotenv.config({ path: `.env.local`, override: true });
 async function executeCron() {
   debug('Executing cron for emails:', EMAILS_LIST)
   debug('Business days:', getBusinessDays())
-  debug('JIRA logs START:', getFirstDayOfMonth())
-  debug('JIRA logs END:', getLastDayOfMonth())
+  debug('JIRA logs START:', getStartDate())
+  debug('JIRA logs END:', getEndDate())
 
   const winners = []
   for (const email of EMAILS_LIST) {
