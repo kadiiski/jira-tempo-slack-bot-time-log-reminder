@@ -24,9 +24,9 @@ const getDateLastDayOfMonth = () => {
 }
 
 const getStartDate = () => {
-  let date10DaysAgo = getDate10DaysAgo();
+  const date10DaysAgo = getDate10DaysAgo();
   const dateFirstDayOfMonth = getDateFirstDayOfMonth();
-  let startDate = new Date(Math.min(date10DaysAgo, dateFirstDayOfMonth));
+  const startDate = new Date(Math.min(date10DaysAgo, dateFirstDayOfMonth));
   return getFormattedDate(startDate);
 }
 
@@ -103,19 +103,19 @@ const getPublicHolidays = (() => {
     publicHolidays.push(`${year}-12-26`);
     let dayOfWeekChristmasEve = (new Date(year, 11, 24)).getDay();
     if (dayOfWeekChristmasEve === 0) { // Sunday 24th.
-      publicHolidays.push(`${year}-12-27`); // Wednesday 27th.
+      publicHolidays.push(`${year}-12-27`); // Wednesday 27th, because 24th is Sunday.
     }
     else if (dayOfWeekChristmasEve === 4) { // Thursday 24th.
       // No need to add Sunday 27th, because it's Sunday.
-      publicHolidays.push(`${year}-12-28`); // Monday 28th.
+      publicHolidays.push(`${year}-12-28`); // Monday 28th, because 26th is Saturday.
     }
     else if (dayOfWeekChristmasEve === 5) { // Friday 24th.
-      publicHolidays.push(`${year}-12-27`); // Monday 27th.
-      publicHolidays.push(`${year}-12-28`); // Tuesday 28th.
+      publicHolidays.push(`${year}-12-27`); // Monday 27th, because 25th is Saturday.
+      publicHolidays.push(`${year}-12-28`); // Tuesday 28th, because 26th is Sunday.
     }
     else if (dayOfWeekChristmasEve === 6) { // Saturday 24th.
-      publicHolidays.push(`${year}-12-27`); // Tuesday 27th.
-      publicHolidays.push(`${year}-12-28`); // Wednesday 28th.
+      publicHolidays.push(`${year}-12-27`); // Tuesday 27th, because 24th is Saturday.
+      publicHolidays.push(`${year}-12-28`); // Wednesday 28th, because 25th is Sunday.
     }
     // Unique and sorted values.
     publicHolidays = [...new Set(publicHolidays)].sort();
@@ -148,7 +148,7 @@ const getBusinessDays = ({ publicHolidays = [] } = {}) => {
     end.setDate(end.getDate() - 1);
   }
 
-  const current = new Date(start);
+  let current = new Date(start);
   while (current <= end) {
     if (isWorkingDay(current, { publicHolidays })) {
       businessDays.push(current.toISOString().split('T')[0])
