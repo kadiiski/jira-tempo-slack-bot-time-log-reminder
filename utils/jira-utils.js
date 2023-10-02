@@ -66,11 +66,12 @@ const getNotLoggedDaysForUser = (email) => {
 
     return getTempoWorkLogsByAccountId(accountId).then(async workLogs => {
       let publicHolidays = await getPublicHolidays();
+      let startDate = new Date(getStartDate());
+      let endDate = new Date(getEndDate());
       workLogs = workLogs?.results?.filter(workLog => {
         const workLogDate = new Date(workLog?.startDate);
-        const currentDate = new Date();
-        // Return WorkLogs for the current month only.
-        return workLogDate.getMonth() === currentDate.getMonth() && workLogDate.getFullYear() === currentDate.getFullYear()
+        // Return WorkLogs between start and end dates.
+        return startDate <= workLogDate && workLogDate <= endDate;
       })
         .map(workLog => {
           const {timeSpentSeconds, startDate, description} = workLog
