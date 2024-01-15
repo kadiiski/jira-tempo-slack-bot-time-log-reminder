@@ -3,6 +3,7 @@ const dotenv = require("dotenv")
 const http = require('http');
 const executeCron = require('./utils/cron')
 const {debug} = require("./utils/debug");
+const {getPublicHolidays} = require("./utils/date");
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
@@ -46,20 +47,23 @@ const cronJob = cron.schedule(process.env.CRON_TIME, () => {
 cronJob.start()
 
 // Create a basic HTTP server
-const server = http.createServer((req, res) => {
-  if (req.url === '/runcron') {
+const server = http.createServer(async (req, res) => {
+  const holidays = await getPublicHolidays();
+
+  if(req.url === '/runcron') {
     // Manually trigger the cron job
     cronJob.now()
     debug('CRON STARTED!')
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.writeHead(200, {'Content-Type': 'text/plain'});
     res.end('Cron job triggered manually');
   } else {
     // Return the index.html file
-    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.writeHead(200, {'Content-Type': 'text/html'});
     res.write(`
         <h1>Cron Job Status</h1>
         <p>Debug: ${process.env.DEBUG}</p>
         <p>Current time: ${currentTime}</p>
+        <p>Holidays: ${holidays.join(', ')}</p>
         <p>Runs: every day at 16:00</p>
         <p>Status: ${cronStatus}</p>
         <p>Last Run: ${lastRunTime}</p>
