@@ -15,6 +15,7 @@ async function executeCron() {
   let publicHolidays = await getPublicHolidays();
   debug('Executing cron for emails:', EMAILS_LIST)
   debug('Business days:', getBusinessDays({publicHolidays}))
+  debug('Public holidays:', publicHolidays)
   debug('JIRA logs START:', getStartDate())
   debug('JIRA logs END:', getEndDate())
 
