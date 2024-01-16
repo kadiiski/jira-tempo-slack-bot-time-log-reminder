@@ -48,8 +48,6 @@ cronJob.start()
 
 // Create a basic HTTP server
 const server = http.createServer(async (req, res) => {
-  const holidays = await getPublicHolidays();
-
   if(req.url === '/runcron') {
     // Manually trigger the cron job
     cronJob.now()
@@ -58,6 +56,7 @@ const server = http.createServer(async (req, res) => {
     res.end('Cron job triggered manually');
   } else {
     // Return the index.html file
+    const holidays = await getPublicHolidays();
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.write(`
         <h1>Cron Job Status</h1>

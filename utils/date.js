@@ -7,6 +7,11 @@ const getFormattedDate = (date) => {
   return `${year}-${month}-${day}`;
 }
 
+const getDateJan1 = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), 0, 1);
+}
+
 const getDate10DaysAgo = () => {
   let date10DaysAgo = new Date();
   date10DaysAgo.setDate(date10DaysAgo.getDate() - 10);
@@ -24,9 +29,10 @@ const getDateLastDayOfMonth = () => {
 }
 
 const getStartDate = () => {
+  const dateJan1 = getDateJan1();
   const date10DaysAgo = getDate10DaysAgo();
   const dateFirstDayOfMonth = getDateFirstDayOfMonth();
-  const startDate = new Date(Math.min(date10DaysAgo, dateFirstDayOfMonth));
+  const startDate = new Date(Math.min(Math.max(dateJan1, date10DaysAgo), dateFirstDayOfMonth));
   return getFormattedDate(startDate);
 }
 
@@ -41,7 +47,7 @@ function incrementFormattedDate(formattedDate, incrementDays) {
 }
 
 async function getEaster(year) {
-  const fallbackDate = "2023-04-16";
+  const fallbackDate = "2024-05-05";
   return axios.get(`https://psdox.com/calendar/api/${year}`)
     .then(response => {
       if (response && response.data) {
@@ -69,14 +75,14 @@ async function getEaster(year) {
 
 // Official public holidays in Bulgaria.
 const getPublicHolidays = (() => {
-  let publicHolidays;
+  let cached = {publicHolidays: null, year: null};
   return async () => {
-    if (publicHolidays) {
-      return publicHolidays;
-    }
     let year = (new Date()).getFullYear();
+    if (cached.publicHolidays && cached.year === year) {
+      return cached.publicHolidays;
+    }
     let easterSunday = await getEaster(year);
-    publicHolidays = [
+    let publicHolidays = [
       `${year}-01-01`,
       `${year}-03-03`,
       incrementFormattedDate(easterSunday, -2), // Good Friday.
@@ -119,6 +125,7 @@ const getPublicHolidays = (() => {
     }
     // Unique and sorted values.
     publicHolidays = [...new Set(publicHolidays)].sort();
+    cached = {publicHolidays, year};
     return publicHolidays;
   }
 })();
