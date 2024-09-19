@@ -7,10 +7,10 @@ const {getPublicHolidays} = require("./utils/date");
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
-// if (process.env.DEBUG === 'true') {
-//   executeCron().then(() => console.log('Success!'))
-//   return;
-// }
+if (process.env.DEBUG === 'true') {
+  executeCron().then(() => console.log('Success!'))
+  return;
+}
 
 const currentTime = new Date().toLocaleString()
 let cronStatus = 'online';

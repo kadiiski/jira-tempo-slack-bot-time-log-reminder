@@ -34,7 +34,8 @@ async function executeCron() {
       continue
     }
 
-    const slackUserId = await getSlackUserIdByEmail(email)
+    // TODO: remove the temp fix for the email.
+    const slackUserId = await getSlackUserIdByEmail(email.replace('ffw', 'jakala'))
     const {displayName} = userData
     const directMessage = `Hello ${displayName}, please log your time for the following days: ${notLoggedDays.map(item => `\`${item}\``).join(', ')}`
 
