@@ -43,6 +43,20 @@ To use this app, you need to have Node.js and npm installed on your machine.
      - `SLACK_BOT_TOKEN`: The main job token, should start with something like "xoxb-...." 
      - `EMAIL_LIST`: Comma separated emails of people for which to check logs.
 
+## birthdays.json
+Use this file to list birthdays of your team members. 
+They will be used in combination with OPENAI_API_KEY env. variable to generate nice weekly birthday messages.
+Those messages will be sent to the slack channel with the ID from the SLACK_CHANNEL_ID_BIRTHDAYS env. variable.
+NOTE: You can also add some other useful information that you want to be sent to the channel, like holidays.
+Use the env. variable BIRTHDAY_MSG_INSTRUCTIONS to add instructions about the format of the birthdays message.
+Format of the JSON:
+```json
+[
+  {"name": "Some Name", "birthday": "3-1-1992", "email": "email@email.com"},
+  {"name": "Some Name", "birthday": "3-1-1992", "email": "email@email.com"}
+]
+```
+
 ## Usage 
 1. Start the app: `yarn start`
 2. The cron job will run at the specified intervals (every day at 15:00 PM). 

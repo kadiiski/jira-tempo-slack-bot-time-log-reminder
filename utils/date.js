@@ -92,7 +92,7 @@ const getPublicHolidays = (() => {
       `${year}-05-24`,
       `${year}-09-06`,
       `${year}-09-22`,
-      `${year}-11-01`,
+      // `${year}-11-01`, Not a non-working day.
     ];
     publicHolidays = [...publicHolidays, ...publicHolidays.reduce((extraHolidays, holiday) => {
       let dayOfWeek = (new Date(holiday)).getDay();

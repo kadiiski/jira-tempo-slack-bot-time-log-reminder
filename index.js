@@ -2,13 +2,16 @@ const cron = require('node-cron');
 const dotenv = require("dotenv")
 const http = require('http');
 const executeCron = require('./utils/cron')
+const executeBirthdayCron = require('./utils/birthdayCron')
 const {debug} = require("./utils/debug");
 const {getPublicHolidays} = require("./utils/date");
 dotenv.config()
 dotenv.config({ path: `.env.local`, override: true });
 
+// Directly run the cron job if the DEBUG flag is set to true.
 if (process.env.DEBUG === 'true') {
-  executeCron().then(() => console.log('Success!'))
+  executeBirthdayCron().then(() => console.log('Success!'))
+  // executeCron().then(() => console.log('Success!'))
   return;
 }
 
@@ -45,6 +48,23 @@ const cronJob = cron.schedule(process.env.CRON_TIME, () => {
 });
 
 cronJob.start()
+
+// Once per week, monday at 9:00 AM.
+const cronJobBirthdays = cron.schedule('0 9 * * 1', () => {
+  debug('Starting cron...');
+  try {
+    executeBirthdayCron().then(() => {
+      debug('Birthday Cron run success!')
+    }).catch(error => {
+      debug('Birthday Cron job failed:', error);
+      cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
+    });
+  } catch (error) {
+    debug('Birthday cron job failed:', error);
+    cronStatus = `Birthday cron failed: <pre>${JSON.stringify(error)}</pre>`;
+  }
+});
+cronJobBirthdays.start();
 
 // Create a basic HTTP server
 const server = http.createServer(async (req, res) => {
