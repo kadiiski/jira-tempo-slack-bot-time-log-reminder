@@ -1,92 +1,143 @@
 const cron = require('node-cron');
-const dotenv = require("dotenv")
+const dotenv = require("dotenv");
 const http = require('http');
-const executeCron = require('./utils/cron')
-const executeBirthdayCron = require('./utils/birthdayCron')
-const {debug} = require("./utils/debug");
-const {getPublicHolidays} = require("./utils/date");
-dotenv.config()
+const executeCron = require('./utils/cron'); // For time logs reminders
+const executeBirthdayCron = require('./utils/birthdayCron'); // For birthday reminders
+const { debug } = require("./utils/debug");
+const { getPublicHolidays } = require("./utils/date");
+
+dotenv.config();
 dotenv.config({ path: `.env.local`, override: true });
 
-// Directly run the cron job if the DEBUG flag is set to true.
-if (process.env.DEBUG === 'true') {
-  executeBirthdayCron().then(() => console.log('Success!'))
-  // executeCron().then(() => console.log('Success!'))
-  return;
-}
+// Initial status and history setup for both cron jobs
+const currentTime = new Date().toLocaleString();
+let cronStatus = { timeLogs: 'online', birthday: 'online' };
+let lastRunTime = { timeLogs: 'never', birthday: 'never' };
+const cronHistory = { timeLogs: [], birthday: [] };
 
-const currentTime = new Date().toLocaleString()
-let cronStatus = 'online';
-let lastRunTime = 'never';
+// Helper function to update cron history
+const updateCronHistory = (cronType, status, error = null) => {
+  const timestamp = new Date().toLocaleString();
+  cronHistory[cronType].push({
+    timestamp,
+    status: status ? 'Success' : 'Failed',
+    details: error ? JSON.stringify(error) : 'No errors'
+  });
+  // Limit history entries to the last 10
+  if (cronHistory[cronType].length > 10) cronHistory[cronType].shift();
+};
 
-// # ┌────────────── second (optional)
-// # │ ┌──────────── minute
-// # │ │ ┌────────── hour
-// # │ │ │ ┌──────── day of month
-// # │ │ │ │ ┌────── month
-// # │ │ │ │ │ ┌──── day of week
-// # │ │ │ │ │ │
-// # │ │ │ │ │ │
-// # * * * * * *
-// Schedule the cron job to execute the function every day at a specific time (e.g., 9:00 AM)
-const cronJob = cron.schedule(process.env.CRON_TIME, () => {
-  debug('Starting cron...');
-  try {
-    executeCron().then(() => {
-      debug('Cron run success!')
-    }).catch(error => {
-      debug('Cron job failed:', error);
-      cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
+// Directly run the cron job if the DEBUG flag is set to true
+// if (process.env.DEBUG === 'true') {
+//   executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
+//   // executeCron().then(() => console.log('Success!'))
+//
+//   return;
+// }
+
+// Time Log Reminder Cron (daily based on CRON_TIME environment variable)
+const timeLogCronJob = cron.schedule(process.env.CRON_TIME, () => {
+  debug('Starting Time Log Reminder Cron...');
+  executeCron()
+    .then(() => {
+      debug('Time Log Reminder Cron run success!');
+      lastRunTime.timeLogs = new Date().toLocaleString();
+      cronStatus.timeLogs = 'Success';
+      updateCronHistory('timeLogs', true);
+    })
+    .catch(error => {
+      debug('Time Log Reminder Cron job failed:', error);
+      cronStatus.timeLogs = 'Failed';
+      updateCronHistory('timeLogs', false, error);
     });
-
-    // Update the last run time
-    lastRunTime = new Date().toLocaleString();
-  } catch (error) {
-    debug('Cron job failed:', error);
-    cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
-  }
 });
+timeLogCronJob.start();
 
-cronJob.start()
-
-// Once per week, monday at 9:00 AM.
-const cronJobBirthdays = cron.schedule('0 9 * * 1', () => {
-  debug('Starting cron...');
-  try {
-    executeBirthdayCron().then(() => {
-      debug('Birthday Cron run success!')
-    }).catch(error => {
-      debug('Birthday Cron job failed:', error);
-      cronStatus = `failed <pre>${JSON.stringify(error)}</pre>`;
+// Birthday Reminder Cron (runs every Monday at 9:00 AM)
+const birthdayCronJob = cron.schedule('0 9 * * 1', () => {
+  debug('Starting Birthday Reminder Cron...');
+  executeBirthdayCron()
+    .then(() => {
+      debug('Birthday Reminder Cron run success!');
+      lastRunTime.birthday = new Date().toLocaleString();
+      cronStatus.birthday = 'Success';
+      updateCronHistory('birthday', true);
+    })
+    .catch(error => {
+      debug('Birthday Reminder Cron job failed:', error);
+      cronStatus.birthday = 'Failed';
+      updateCronHistory('birthday', false, error);
     });
-  } catch (error) {
-    debug('Birthday cron job failed:', error);
-    cronStatus = `Birthday cron failed: <pre>${JSON.stringify(error)}</pre>`;
-  }
 });
-cronJobBirthdays.start();
+birthdayCronJob.start();
 
-// Create a basic HTTP server
+// Create an HTTP server to display cron status and history
 const server = http.createServer(async (req, res) => {
-  if(req.url === '/runcron') {
-    // Manually trigger the cron job
-    cronJob.now()
-    debug('CRON STARTED!')
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Cron job triggered manually');
+  if (req.url === '/run-time-log-cron') {
+    // Manually trigger the Time Log Reminder cron
+    timeLogCronJob.now();
+    debug('Time Log Reminder cron triggered manually!');
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Time Log Reminder cron triggered manually');
+  } else if (req.url === '/run-birthday-cron') {
+    // Manually trigger the Birthday cron
+    birthdayCronJob.now();
+    debug('Birthday cron triggered manually!');
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Time Log Reminder cron triggered manually');
   } else {
-    // Return the index.html file
+    // Display cron status and history
     const holidays = await getPublicHolidays();
-    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.writeHead(200, { 'Content-Type': 'text/html' });
     res.write(`
+      <html>
+      <head>
+        <title>Cron Job Status</title>
+        <style>
+          body { font-family: Arial, sans-serif; }
+          h1 { color: #333; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { padding: 8px 12px; border: 1px solid #ccc; text-align: left; }
+          th { background-color: #f4f4f4; }
+          .status-success { color: green; }
+          .status-failed { color: red; }
+        </style>
+      </head>
+      <body>
         <h1>Cron Job Status</h1>
-        <p>Debug: ${process.env.DEBUG}</p>
-        <p>Current time: ${currentTime}</p>
-        <p>Holidays: ${holidays.join(', ')}</p>
-        <p>Runs: every day at 16:00</p>
-        <p>Status: ${cronStatus}</p>
-        <p>Last Run: ${lastRunTime}</p>
-`);
+        <p><strong>Current Time:</strong> ${currentTime}</p>
+        <p><strong>Public Holidays:</strong> ${holidays.join(', ')}</p>
+        
+        <h2>Time Log Reminder Cron</h2>
+        <p><strong>Status:</strong> <span class="status-${cronStatus.timeLogs === 'Success' ? 'success' : 'failed'}">${cronStatus.timeLogs}</span></p>
+        <p><strong>Last Run:</strong> ${lastRunTime.timeLogs}</p>
+        <table>
+          <tr><th>Timestamp</th><th>Status</th><th>Details</th></tr>
+          ${cronHistory.timeLogs.map(entry => `
+            <tr>
+              <td>${entry.timestamp}</td>
+              <td class="status-${entry.status === 'Success' ? 'success' : 'failed'}">${entry.status}</td>
+              <td>${entry.details}</td>
+            </tr>
+          `).join('')}
+        </table>
+
+        <h2>Birthday Reminder Cron</h2>
+        <p><strong>Status:</strong> <span class="status-${cronStatus.birthday === 'Success' ? 'success' : 'failed'}">${cronStatus.birthday}</span></p>
+        <p><strong>Last Run:</strong> ${lastRunTime.birthday}</p>
+        <table>
+          <tr><th>Timestamp</th><th>Status</th><th>Details</th></tr>
+          ${cronHistory.birthday.map(entry => `
+            <tr>
+              <td>${entry.timestamp}</td>
+              <td class="status-${entry.status === 'Success' ? 'success' : 'failed'}">${entry.status}</td>
+              <td>${entry.details}</td>
+            </tr>
+          `).join('')}
+        </table>
+      </body>
+      </html>
+    `);
     res.end();
   }
 });

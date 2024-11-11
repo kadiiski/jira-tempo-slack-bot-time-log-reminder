@@ -37,15 +37,12 @@ async function executeBirthdayCron() {
 
   debug('Birthday cron message:', channelMessage)
 
-  if (!channelMessage.emails) {
-    debug('No emails found in the message.')
-    return
-  }
-
-  // Replace the emails in message with slack user id.
-  for (const email of channelMessage.emails) {
-    const slackUserId= await getSlackUserIdByEmail(email.replace('ffw', 'jakala'));
-    channelMessage.message = channelMessage.message.replace(email, `<@${slackUserId}>`);
+  if (channelMessage.emails) {
+    // Replace the emails in message with slack user id.
+    for (const email of channelMessage.emails) {
+      const slackUserId= await getSlackUserIdByEmail(email.replace('ffw', 'jakala'));
+      channelMessage.message = channelMessage.message.replace(email, `<@${slackUserId}>`);
+    }
   }
 
   await sendSlackMessage(SLACK_CHANNEL_ID_BIRTHDAYS, channelMessage.message)
@@ -64,25 +61,36 @@ async function getBirthdayMessage() {
     const celebrationMessage = generateCelebrationMessage(jsonFileContents);
     debug('Filtered dates:', celebrationMessage);
 
-    const gptPrompt = `I will provide a celebration message containing peoples details such as birthdays, anniversaries, hiring dates and others.
+    const birthdayPrompt = `I will provide a celebration message containing peoples details such as birthdays, anniversaries, hiring dates and others.
       Your task is to:
       - Current date and time is ${getCurrentDateTime()}.
       - Replace peoples names with their emails and include the dates and days of the week for each person mentioned.
+      - Format the message well so that it is clearly visible who, when and what is celebrating.
       - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
-      Here is the message:
-      '${JSON.stringify(celebrationMessage)}
+      - This message will be directly sent to the team. So make it final - no placeholders.
+      Here is the message: ${JSON.stringify(celebrationMessage)}
       `;
+
+    const noBirthdaysPrompt = `We don't have any birthdays to celebrate this week. 
+          - Make a nice message to the team to keep the spirits high!
+          - Current date and time is ${getCurrentDateTime()}.
+          - Do not return emails in the response.
+          - This message will be directly sent to the team. So make it final - no placeholders.
+          - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
+          `;
+
+    const gptPrompt = celebrationMessage ? birthdayPrompt : noBirthdaysPrompt;
 
     debug('GPT prompt:', gptPrompt);
 
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
-        model: 'gpt-4',
+        model: 'gpt-4-turbo',
         temperature: 0.7,
         messages: [
           { role: 'user', content: gptPrompt },
-          { role: 'system', content: `Respond ONLY in strict JSON format like { "message": "...", "emails": ["email1", "email2", ...] }.` },
+          { role: 'system', content: `Respond ONLY in strict valid JSON format { "message": "...", "emails": [...] }.` },
         ],
       },
       {
