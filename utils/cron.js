@@ -2,6 +2,7 @@ const {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteT
 const {getBusinessDays, getStartDate, getEndDate, getPublicHolidays} = require('./date')
 const dotenv = require("dotenv");
 const {debug} = require("./debug");
+const axios = require("axios");
 const EMAILS_LIST = (process.env.EMAIL_LIST || "").split(',').map(s => s.trim())
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID
 const ENABLE_WINNERS = process.env.ENABLE_WINNERS === 'true'
@@ -69,9 +70,10 @@ async function executeCron() {
   const winnerGroups = Object.fromEntries(winners.map(winner => [winner.notLoggedDays, []]))
 
   // Build winners groups.
-  winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
+  winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(`${item.slackUserId} (${item.email})`))
+  // winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
 
-  const channelMessage = Object.keys(winnerGroups).sort((a,b) => b - a).map((count, index) => {
+  const winnersMessage = Object.keys(winnerGroups).sort((a,b) => b - a).map((count, index) => {
     const people = winnerGroups?.[count].map(slackId => `<@${slackId}>`)
     // Build the message row.
     const place = index + 1;
@@ -91,10 +93,60 @@ async function executeCron() {
   }).join('\n\n')
 
   // Send the channel message.
-  debug(`Sending channel message:`, channelMessage)
+  debug(`Sending channel message:`, winnersMessage)
+
+  const channelMessage = await getTimeLogsMessage(winnersMessage);
 
   if (process.env.TEST_MODE !== 'true') {
     await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
+  }
+}
+
+async function getTimeLogsMessage(message) {
+  try {
+    const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours.
+      We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
+      The names of the people are slack user IDs, so don't change them.
+      Remove the emails, they are just so you know the gender of the person.
+      You can also use the names of the people to make jokes or puns.
+      No need to follow the same format, just make it funny.
+      Here is the message: 
+      ${message}
+      `;
+
+    debug('GPT prompt:', gptPrompt);
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4-turbo',
+        temperature: 1,
+        messages: [
+          { role: 'user', content: gptPrompt },
+          { role: 'system', content: process.env.TIME_LOG_GPT_SYSTEM_INSTRUCTIONS },
+        ],
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    // Extract the message content from the response
+    const gptResponse = response.data.choices[0].message.content;
+    debug('GPT response:', gptResponse);
+
+    // Check if there is a message returned
+    if (!gptResponse) {
+      debug('No message returned.');
+      return;
+    }
+
+    return gptResponse;
+  } catch (error) {
+    debug('Error making API request:', error);
   }
 }
 
