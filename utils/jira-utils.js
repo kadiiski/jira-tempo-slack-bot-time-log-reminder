@@ -126,7 +126,16 @@ const sendSlackMessage = async (id, message) => {
   // Send a direct message to the user using the chat.postMessage method
   slackClient.chat.postMessage({
     channel: id,
-    text: message
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: message // Now it will support *bold* and other markdown
+        }
+      }
+    ]
+    // text: message
   })
     .then(() => console.log('Notification sent successfully!'))
     .catch(error => console.error('ERROR: sendSlackMessage', error));

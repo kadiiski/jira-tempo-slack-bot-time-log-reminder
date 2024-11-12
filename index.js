@@ -28,12 +28,12 @@ const updateCronHistory = (cronType, status, error = null) => {
 };
 
 // Directly run the cron job if the DEBUG flag is set to true
-// if (process.env.DEBUG === 'true') {
-//   executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
-//   // executeCron().then(() => console.log('Success!'))
-//
-//   return;
-// }
+if (process.env.DEBUG === 'true') {
+  // executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
+  executeCron().then(() => console.log('Success!'))
+
+  return;
+}
 
 // Time Log Reminder Cron (daily based on CRON_TIME environment variable)
 const timeLogCronJob = cron.schedule(process.env.CRON_TIME, () => {
