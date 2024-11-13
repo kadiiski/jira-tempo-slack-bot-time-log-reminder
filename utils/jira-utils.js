@@ -115,9 +115,9 @@ async function getSlackUserIdByEmail(email) {
 
 const sendSlackMessage = async (id, message) => {
   // Don't send the real message.
-  if(process.env.TEST_MODE === 'true' && process.env.ADMIN_EMAIL.replace('ffw', 'jakala')) {
+  if(process.env.TEST_MODE === 'true' && process.env.ADMIN_EMAIL) {
     // Set the ID to the admin ID.
-    id = await getSlackUserIdByEmail("ivaiylo.kadiyski@jakala.com")
+    id = await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)
   } else if (process.env.TEST_MODE === 'true') {
     // just stop it
     return

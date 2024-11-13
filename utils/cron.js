@@ -102,13 +102,14 @@ async function executeCron() {
 
 async function getTimeLogsMessage(message) {
   try {
-    const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours.
-      We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
-      The names of the people are slack user IDs, so don't change them.
-      The message must be properly formatted for slack.
-      Remove the emails, they are just so you know the gender of the person.
-      You can also use the names of the people to make jokes or puns.
-      No need to follow the same format, just make it funny.
+    const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours in Jira.
+      - We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
+      - The names of the people are slack user IDs, so don't change them.
+      - The message must be properly formatted for slack.
+      - Respect the gender of the names and write them in the proper language.
+      - Remove the emails, they are just so you know the gender and name of the person.
+      - You can also use the names of the people to make jokes or puns.
+      - No need to follow the same format, just make it funny.
       Here is the message: 
       ${message}
       `;
