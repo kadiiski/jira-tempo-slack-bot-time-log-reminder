@@ -5,6 +5,7 @@ const executeCron = require('./utils/cron'); // For time logs reminders
 const executeBirthdayCron = require('./utils/birthdayCron'); // For birthday reminders
 const { debug } = require("./utils/debug");
 const { getPublicHolidays } = require("./utils/date");
+const { handleSlackEvents } = require("./utils/feedbackBot");
 
 dotenv.config();
 dotenv.config({ path: `.env.local`, override: true });
@@ -14,6 +15,13 @@ const currentTime = new Date().toLocaleString();
 let cronStatus = { timeLogs: 'online', birthday: 'online' };
 let lastRunTime = { timeLogs: 'never', birthday: 'never' };
 const cronHistory = { timeLogs: [], birthday: [] };
+
+// Directly run the cron job if the DEBUG flag is set to true
+// if (process.env.DEBUG === 'true') {
+//   // executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
+//   executeCron().then(() => console.log('Success!'))
+//   return;
+// }
 
 // Helper function to update cron history
 const updateCronHistory = (cronType, status, error = null) => {
@@ -26,14 +34,6 @@ const updateCronHistory = (cronType, status, error = null) => {
   // Limit history entries to the last 10
   if (cronHistory[cronType].length > 10) cronHistory[cronType].shift();
 };
-
-// Directly run the cron job if the DEBUG flag is set to true
-if (process.env.DEBUG === 'true') {
-  // executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
-  executeCron().then(() => console.log('Success!'))
-
-  return;
-}
 
 // Time Log Reminder Cron (daily based on CRON_TIME environment variable)
 const timeLogCronJob = cron.schedule(process.env.CRON_TIME, () => {
@@ -73,7 +73,33 @@ birthdayCronJob.start();
 
 // Create an HTTP server to display cron status and history
 const server = http.createServer(async (req, res) => {
-  if (req.url === '/run-time-log-cron') {
+  if (req.method === 'POST' && req.url === '/slack/events') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const slackEvent = JSON.parse(body);
+
+        // Respond to Slack URL verification challenge
+        if (slackEvent.type === 'url_verification') {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(slackEvent.challenge);
+          return;
+        }
+
+        // Pass the event to the handleSlackEvents function
+        await handleSlackEvents(slackEvent.event);
+
+        // Respond to Slack after processing the event
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end();
+      } catch (error) {
+        console.error('Error processing Slack event:', error);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      }
+    });
+  } else if (req.url === '/run-time-log-cron') {
     // Manually trigger the Time Log Reminder cron
     timeLogCronJob.now();
     debug('Time Log Reminder cron triggered manually!');

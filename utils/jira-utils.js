@@ -40,6 +40,21 @@ const getJiraUserByEmail = (email) => {
     .catch(error => console.error('ERROR: getJiraUserByEmail', email));
 }
 
+const getSlackUserById = async (userId) => {
+  try {
+    const response = await slackClient.users.info({ user: userId });
+    if (response.ok) {
+      return response.user; // The user object containing details like name, email, etc.
+    } else {
+      console.error('ERROR: Unable to fetch user info from Slack', response.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('ERROR: getSlackUserById', error);
+    return null;
+  }
+};
+
 const getTempoWorkLogsByAccountId = (accountId) => {
   let config = {
     method: 'get',
@@ -177,4 +192,4 @@ const inviteToChannel = (userId, channelId) => {
   })
 }
 
-module.exports = {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteToChannel}
+module.exports = {getNotLoggedDaysForUser, getSlackUserIdByEmail, sendSlackMessage, inviteToChannel, getSlackUserById}

@@ -106,6 +106,8 @@ async function getTimeLogsMessage(message) {
       - We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
       - The names of the people are slack user IDs, so don't change them.
       - The message must be properly formatted for slack.
+      - Use properly :first_place_medal:, :second_place_medal:, :third_place_medal: emojis.
+      - Use only slack emojis that you are sure exist.
       - Respect the gender of the names and write them in the proper language.
       - Remove the emails, they are just so you know the gender and name of the person.
       - You can also use the names of the people to make jokes or puns.
