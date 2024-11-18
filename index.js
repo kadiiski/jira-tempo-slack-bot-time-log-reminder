@@ -5,7 +5,7 @@ const executeCron = require('./utils/cron'); // For time logs reminders
 const executeBirthdayCron = require('./utils/birthdayCron'); // For birthday reminders
 const { debug } = require("./utils/debug");
 const { getPublicHolidays } = require("./utils/date");
-const { handleSlackEvents } = require("./utils/feedbackBot");
+const { handleSlashCommand } = require("./utils/feedbackBot");
 
 dotenv.config();
 dotenv.config({ path: `.env.local`, override: true });
@@ -73,28 +73,23 @@ birthdayCronJob.start();
 
 // Create an HTTP server to display cron status and history
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'POST' && req.url === '/slack/events') {
+  if (req.method === 'POST' && req.url === '/slack/commands') {
     let body = '';
     req.on('data', chunk => body += chunk.toString());
     req.on('end', async () => {
       try {
-        const slackEvent = JSON.parse(body);
+        // Parse the x-www-form-urlencoded body
+        const params = new URLSearchParams(body);
+        const slackCommand = Object.fromEntries(params.entries());
 
-        // Respond to Slack URL verification challenge
-        if (slackEvent.type === 'url_verification') {
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end(slackEvent.challenge);
-          return;
-        }
+        // Pass the command data to the handler
+        await handleSlashCommand(slackCommand);
 
-        // Pass the event to the handleSlackEvents function
-        handleSlackEvents(slackEvent.event).then();
-
-        // Respond to Slack after processing the event
+        // Respond to Slack to acknowledge the command
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end();
       } catch (error) {
-        console.error('Error processing Slack event:', error);
+        console.error('Error processing Slash Command:', error);
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('Internal Server Error');
       }
