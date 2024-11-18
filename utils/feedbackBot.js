@@ -3,16 +3,13 @@ const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
 const {getSlackUserById, getSlackUserIdByEmail} = require("./jira-utils");
 const axios = require("axios");
+const {botResponse, getBotUserId, slackClient} = require("./slack-utils");
 
 // Environment variables
-const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // 32 characters for AES-256
-
 if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) {
   throw new Error('Encryption key must be exactly 32 characters long.');
 }
-
-const slackClient = new WebClient(SLACK_BOT_TOKEN);
 
 // Initialize SQLite database
 const db = new sqlite3.Database("./feedback.db", (err) => {
@@ -51,22 +48,16 @@ const decrypt = (encryptedText) => {
 // Listen for messages from the bot direct messages
 async function handleSlackEvents(event) {
   try {
-    // Ignore non-message events or bot messages
-    if (!event || event.subtype === "bot_message" || !event.text) {
+    const botUserId = await getBotUserId();
+    // Ignore non-message events, bot messages, or messages sent by the bot itself
+    if (!event || event.subtype === "bot_message" || !event.text || event.user === botUserId) {
       return;
-    }
-
-    const respond = async (message) => {
-      return await slackClient.chat.postMessage({
-        channel: event.channel,
-        blocks: [{type: "section", text: {type: "mrkdwn", text: message}}]
-      })
     }
 
     const text = event.text.trim();
 
     if (text === "help") {
-      await respond(`
+      await botResponse(`
       Hello! 👋 I’m here to help you manage feedback. Here’s what I can do:
       1️⃣ **Submit Feedback**:
          - Share feedback about someone confidentially.
@@ -85,7 +76,7 @@ async function handleSlackEvents(event) {
       💡 _Note: All messages sent to me are confidential and will be deleted after processing._
       
       If you have any questions, feel free to ask!
-      `);
+      `, event.channel);
     } else if (text.startsWith("delete all messages")) {
       // Delete all bot messages from this channel.
       const messages = await slackClient.conversations.history({
@@ -110,13 +101,10 @@ async function handleSlackEvents(event) {
       await handleFeedbackMessage(event);
     } else {
       // Respond with instructions for unrecognized message formats
-      await slackClient.chat.postMessage({
-        channel: event.channel,
-        text: `Unrecognized message format. 
+      await botResponse(`Unrecognized message format. 
         If you want to share your feedback about someone, use the format: @recipient your feedback message.
         If you want to retrieve feedback for someone, use the format: Pass: <password>, Feedback for @person, @person...
-        `
-      });
+        `, event.channel);
     }
   } catch (error) {
     console.error("Error in handleSlackEvents:", error);
@@ -128,17 +116,10 @@ async function handleFeedbackMessage(event) {
     const text = event.text.trim();
     const author = await getSlackUserById(event.user); // Sender's Slack ID
 
-    const respond = async (message) => {
-      return await slackClient.chat.postMessage({
-        channel: event.channel,
-        blocks: [{type: "section", text: {type: "mrkdwn", text: message}}]
-      })
-    }
-
     // Parse message for recipient and feedback
     const match = text.match(/^@(\w+)\s(.+)/); // Format: @recipient feedback message
     if (!match) {
-      await respond("Please use the format: `@recipient your feedback`.")
+      await botResponse("Please use the format: `@recipient your feedback`.", event.channel);
       return;
     }
 
@@ -146,13 +127,13 @@ async function handleFeedbackMessage(event) {
     const feedback = match[2];
 
     if (!feedback) {
-      await respond("Please include feedback after the recipient's name.")
+      await botResponse("Please include feedback after the recipient's name.", event.channel);
       return;
     }
 
     const recipient = await getSlackUserById(recipientId);
     if (!recipient) {
-      await respond("Recipient not found. Please use the format: `@recipient your feedback`.")
+      await botResponse("Recipient not found. Please use the format: `@recipient your feedback`.", event.channel);
       return;
     }
 
@@ -166,13 +147,13 @@ async function handleFeedbackMessage(event) {
       async (err) => {
         if(err) {
           console.error("Error saving feedback:", err.message);
-          await respond("Something went wrong. Please try again later. Error: " + err.message)
+          await botResponse("Something went wrong. Please try again later. Error: " + err.message, event.channel);
         }
       }
     );
 
     // Confirm message was saved
-    await respond(`Your feedback for <@${recipient.id}> has been saved securely and will remain confidential. Thank you!`);
+    await botResponse(`Your feedback for <@${recipient.id}> has been saved securely and will remain confidential. Thank you!`, event.channel);
 
     // Delete the original message
     await slackClient.chat.delete({
@@ -190,17 +171,10 @@ async function handleManagerMessage(event) {
     const channelId = event.channel;
     const timestamp = event.ts;
 
-    const respond = async (message) => {
-      return await slackClient.chat.postMessage({
-        channel: event.channel,
-        blocks: [{type: "section", text: {type: "mrkdwn", text: message}}]
-      })
-    }
-
     // Check if the message matches the expected format
     const match = text.match(/pass:\s*(\S+).*?(@[\w\s,]+)/i); // Case-insensitive match for "Pass: <password>"
     if (!match) {
-      await respond("Invalid format. Please include `Pass: <password>` followed by `@person` mentions.");
+      await botResponse("Invalid format. Please include `Pass: <password>` followed by `@person` mentions.", channelId);
       return;
     }
 
@@ -209,7 +183,7 @@ async function handleManagerMessage(event) {
 
     // Validate the password
     if (password !== process.env.MANAGER_PASSWORD) {
-      await respond("Invalid password. Access denied.");
+      await botResponse("Invalid password. Access denied.", channelId);
       return;
     }
 
@@ -276,7 +250,7 @@ async function handleManagerMessage(event) {
       console.error('Error making API request:', error);
     }
 
-    const botResponse = await respond(feedbackResponse.trim());
+    const botResponseEvent = await botResponse(feedbackResponse.trim(), channelId);
 
     // Wait 10 seconds and delete both the original message and the bot's response
     setTimeout(async () => {
@@ -288,18 +262,18 @@ async function handleManagerMessage(event) {
         });
       } catch (error) {
         console.error("Error deleting manager message:", error);
-        await respond(`Error deleting manager message, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message);
+        await botResponse(`Error deleting manager message, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message, channelId);
       }
 
       try {
-        // Delete the bot's response message
+        // Delete the bots response message
         await slackClient.chat.delete({
-          channel: botResponse.channel,
-          ts: botResponse.message.ts
+          channel: botResponseEvent.channel,
+          ts: botResponseEvent.message.ts
         });
       } catch (error) {
         console.error("Error deleting messages:", error);
-        await respond(`Error deleting messages, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message);
+        await botResponse(`Error deleting messages, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message, channelId);
       }
     }, 1000*60*10); // 10 minutes.
   } catch (error) {

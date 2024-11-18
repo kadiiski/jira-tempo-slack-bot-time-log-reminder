@@ -101,8 +101,7 @@ async function executeCron() {
 }
 
 async function getTimeLogsMessage(message) {
-  try {
-    const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours in Jira.
+  const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours in Jira.
       - We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
       - The names of the people are slack user IDs, so don't change them.
       - The message must be properly formatted for slack.
@@ -116,40 +115,36 @@ async function getTimeLogsMessage(message) {
       ${message}
       `;
 
-    debug('GPT prompt:', gptPrompt);
+  debug('GPT prompt:', gptPrompt);
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4-turbo',
-        temperature: 1,
-        messages: [
-          { role: 'user', content: gptPrompt },
-          { role: 'system', content: process.env.TIME_LOG_GPT_SYSTEM_INSTRUCTIONS },
-        ],
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+  const response = await axios.post(
+    'https://api.openai.com/v1/chat/completions',
+    {
+      model: 'gpt-4-turbo',
+      temperature: 1,
+      messages: [
+        { role: 'user', content: gptPrompt },
+        { role: 'system', content: process.env.TIME_LOG_GPT_SYSTEM_INSTRUCTIONS },
+      ],
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
       }
-    );
-
-    // Extract the message content from the response
-    const gptResponse = response.data.choices[0].message.content;
-    debug('GPT response:', gptResponse);
-
-    // Check if there is a message returned
-    if (!gptResponse) {
-      debug('No message returned.');
-      return;
     }
+  );
 
-    return gptResponse;
-  } catch (error) {
-    debug('Error making API request:', error);
+  // Extract the message content from the response
+  const gptResponse = response.data.choices[0].message.content;
+  debug('GPT response:', gptResponse);
+
+  // Check if there is a message returned
+  if (!gptResponse) {
+    throw new Error('No message returned.');
   }
+
+  return gptResponse;
 }
 
 module.exports = executeCron

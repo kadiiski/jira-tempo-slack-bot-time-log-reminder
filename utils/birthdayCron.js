@@ -16,8 +16,7 @@ async function executeBirthdayCron() {
 
   // Check if ../birthdays.json exists.
   if (!fs.existsSync('birthdays.json')) {
-    debug('Birthdays file not found.')
-    return
+    throw new Error('Birthdays file not found.')
   }
 
   let channelMessage;
@@ -25,14 +24,12 @@ async function executeBirthdayCron() {
   try {
     channelMessage = JSON.parse(await getBirthdayMessage());
   } catch (error) {
-    debug('Error getting birthday message:', error);
-    return
+    throw new Error('Error getting birthday message.')
   }
 
   // Check if there is a message returned.
   if (!channelMessage) {
-    debug('No message returned.')
-    return
+    throw new Error('No message returned.')
   }
 
   debug('Birthday cron message:', channelMessage)
@@ -55,66 +52,61 @@ function getCurrentDateTime() {
 }
 
 async function getBirthdayMessage() {
-  try {
-    const jsonFileContents = JSON.parse(fs.readFileSync('birthdays.json', 'utf8'));
+  const jsonFileContents = JSON.parse(fs.readFileSync('birthdays.json', 'utf8'));
 
-    const celebrationMessage = generateCelebrationMessage(jsonFileContents);
-    debug('Filtered dates:', celebrationMessage);
+  const celebrationMessage = generateCelebrationMessage(jsonFileContents);
+  debug('Filtered dates:', celebrationMessage);
 
-    const birthdayPrompt = `I will provide a celebration message containing peoples details such as birthdays, anniversaries, hiring dates and others.
-      Your task is to:
-      - Current date and time is ${getCurrentDateTime()}.
-      - Replace peoples names with their emails and include the dates and days of the week for each person mentioned.
-      - Format the message well so that it is clearly visible who, when and what is celebrating.
-      - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
-      - This message will be directly sent to the team. So make it final - no placeholders.
-      Here is the message: ${JSON.stringify(celebrationMessage)}
-      `;
+  const birthdayPrompt = `I will provide a celebration message containing peoples details such as birthdays, anniversaries, hiring dates and others.
+    Your task is to:
+    - Current date and time is ${getCurrentDateTime()}.
+    - Replace peoples names with their emails and include the dates and days of the week for each person mentioned.
+    - Format the message well so that it is clearly visible who, when and what is celebrating.
+    - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
+    - This message will be directly sent to the team. So make it final - no placeholders.
+    Here is the message: ${JSON.stringify(celebrationMessage)}
+    `;
 
-    const noBirthdaysPrompt = `We don't have any birthdays to celebrate this week. 
-          - Make a nice message to the team to keep the spirits high!
-          - Current date and time is ${getCurrentDateTime()}.
-          - Do not return emails in the response.
-          - This message will be directly sent to the team. So make it final - no placeholders.
-          - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
-          `;
+  const noBirthdaysPrompt = `We don't have any birthdays to celebrate this week. 
+        - Make a nice message to the team to keep the spirits high!
+        - Current date and time is ${getCurrentDateTime()}.
+        - Do not return emails in the response.
+        - This message will be directly sent to the team. So make it final - no placeholders.
+        - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
+        `;
 
-    const gptPrompt = celebrationMessage ? birthdayPrompt : noBirthdaysPrompt;
+  const gptPrompt = celebrationMessage ? birthdayPrompt : noBirthdaysPrompt;
 
-    debug('GPT prompt:', gptPrompt);
+  debug('GPT prompt:', gptPrompt);
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4-turbo',
-        temperature: 0.7,
-        messages: [
-          { role: 'user', content: gptPrompt },
-          { role: 'system', content: `Respond ONLY in strict valid JSON format { "message": "...", "emails": [...] }.` },
-        ],
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+  const response = await axios.post(
+    'https://api.openai.com/v1/chat/completions',
+    {
+      model: 'gpt-4-turbo',
+      temperature: 0.7,
+      messages: [
+        { role: 'user', content: gptPrompt },
+        { role: 'system', content: `Respond ONLY in strict valid JSON format { "message": "...", "emails": [...] }.` },
+      ],
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
       }
-    );
-
-    // Extract the message content from the response
-    const gptResponse = response.data.choices[0].message.content;
-    debug('GPT response:', gptResponse);
-
-    // Check if there is a message returned
-    if (!gptResponse) {
-      debug('No message returned.');
-      return;
     }
+  );
 
-    return gptResponse;
-  } catch (error) {
-    debug('Error making API request:', error);
+  // Extract the message content from the response
+  const gptResponse = response.data.choices[0].message.content;
+  debug('GPT response:', gptResponse);
+
+  // Check if there is a message returned
+  if (!gptResponse) {
+    throw new Error('No message returned.');
   }
+
+  return gptResponse;
 }
 
 // Helper function to parse dates, replacing the year with the current year

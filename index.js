@@ -18,8 +18,8 @@ const cronHistory = { timeLogs: [], birthday: [] };
 
 // Directly run the cron job if the DEBUG flag is set to true
 // if (process.env.DEBUG === 'true') {
-//   // executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
-//   executeCron().then(() => console.log('Success!'))
+//   executeBirthdayCron().then(() => console.log('Birthday Cron Success!'));
+//   // executeCron().then(() => console.log('Success!'))
 //   return;
 // }
 
@@ -134,7 +134,7 @@ const server = http.createServer(async (req, res) => {
         <p><strong>Current Time:</strong> ${currentTime}</p>
         <p><strong>Public Holidays:</strong> ${holidays.join(', ')}</p>
         
-        <h2>Time Log Reminder Cron</h2>
+        <h2>Time Log Reminder Cron <a href="/run-time-log-cron" target="_blank">[RUN NOW]</a></h2>
         <p><strong>Status:</strong> <span class="status-${cronStatus.timeLogs === 'Success' ? 'success' : 'failed'}">${cronStatus.timeLogs}</span></p>
         <p><strong>Last Run:</strong> ${lastRunTime.timeLogs}</p>
         <table>
@@ -148,7 +148,7 @@ const server = http.createServer(async (req, res) => {
           `).join('')}
         </table>
 
-        <h2>Birthday Reminder Cron</h2>
+        <h2>Birthday Reminder Cron <a href="/run-birthday-cron" target="_blank">[RUN NOW]</a></h2>
         <p><strong>Status:</strong> <span class="status-${cronStatus.birthday === 'Success' ? 'success' : 'failed'}">${cronStatus.birthday}</span></p>
         <p><strong>Last Run:</strong> ${lastRunTime.birthday}</p>
         <table>
