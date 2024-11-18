@@ -106,9 +106,9 @@ async function handleSlackEvents(event) {
       await handleFeedbackMessage(event);
     } else {
       // Respond with instructions for unrecognized message formats
-      await botResponse(`Unrecognized message format. 
-        If you want to share your feedback about someone, use the format: @recipient your feedback message.
-        If you want to retrieve feedback for someone, use the format: Pass: <password>, Feedback for @person, @person...
+      await botResponse(`Unrecognized message format.\n\n 
+        If you want to share your feedback about someone, use the format: \`@recipient your feedback message\`.\n
+        If you want to retrieve feedback for someone, use the format: \`Pass: <password>, Feedback for @person, @person...\`
         `, event.channel);
     }
   } catch (error) {
