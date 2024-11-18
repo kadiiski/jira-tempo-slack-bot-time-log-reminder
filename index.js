@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         // Pass the event to the handleSlackEvents function
-        await handleSlackEvents(slackEvent.event);
+        handleSlackEvents(slackEvent.event).then();
 
         // Respond to Slack after processing the event
         res.writeHead(200, { 'Content-Type': 'text/plain' });

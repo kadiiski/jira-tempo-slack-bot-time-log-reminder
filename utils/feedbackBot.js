@@ -190,7 +190,7 @@ async function handleManagerMessage(event) {
     const recipientsText = match[2];
 
     // Validate the password
-    if (password !== process.env.MANAGER_PASSWORD) {
+    if (password.trim().toLowerCase() !== process.env.MANAGER_PASSWORD.trim().toLowerCase()) {
       await botResponse("Invalid password. Access denied.", channelId);
       return;
     }
