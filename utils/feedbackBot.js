@@ -59,17 +59,22 @@ async function handleSlackEvents(event) {
     if (text === "help") {
       await botResponse(`
       Hello! 👋 I’m here to help you manage feedback. Here’s what I can do:
-      1️⃣ **Submit Feedback**:
+   :one: *Submit Feedback*:
          - Share feedback about someone confidentially.
          - *Format*: \`@recipient your feedback\`
          - *Example*: \`@john_doe Great job on the project!\`
       
-      2️⃣ **Retrieve Feedback (Managers Only)**:
+   :two: *Retrieve Feedback (Managers Only)*:
          - View feedback submitted for one or more people.
          - *Format*: \`Pass: <password>, Feedback for @recipient1, @recipient2\`
          - *Example*: \`Pass: secret123, Feedback for @john_doe, @jane_smith\`
       
-      3️⃣ **Help**:
+   :three: *Delete all messages*:
+         - Delete everything I've sent you (clear our history).
+         - *Format*: \`delete all messages\`
+         - *Example*: \`delete all messages\`
+      
+  :four: *Help*:
          - Get this help message anytime.
          - *Command*: \`help\`
       
@@ -96,7 +101,7 @@ async function handleSlackEvents(event) {
     } else if (text.startsWith("Pass:")) {
       // Route to handleManagerMessage for manager commands
       await handleManagerMessage(event);
-    } else if (text.match(/^@(\w+)\s(.+)/)) {
+    } else if (text.match(/^<@(\w+)>\s+(.+)/)) {
       // Route to handleFeedbackMessage for feedback
       await handleFeedbackMessage(event);
     } else {
@@ -117,9 +122,12 @@ async function handleFeedbackMessage(event) {
     const author = await getSlackUserById(event.user); // Sender's Slack ID
 
     // Parse message for recipient and feedback
-    const match = text.match(/^@(\w+)\s(.+)/); // Format: @recipient feedback message
+    const match = text.match(/^<@(\w+)>\s+(.+)/); // Format: <@recipient_id> feedback message
     if (!match) {
-      await botResponse("Please use the format: `@recipient your feedback`.", event.channel);
+      await botResponse(
+        "Please use the format: `@recipient your feedback`. Mention the user properly using @.",
+        event.channel
+      );
       return;
     }
 
@@ -172,9 +180,9 @@ async function handleManagerMessage(event) {
     const timestamp = event.ts;
 
     // Check if the message matches the expected format
-    const match = text.match(/pass:\s*(\S+).*?(@[\w\s,]+)/i); // Case-insensitive match for "Pass: <password>"
+    const match = text.match(/pass:\s*(\S+).*?(<@[\w]+(?:>\s*[,<@]*[\w]*)*)/i); // Match "Pass: <password>" followed by mentions
     if (!match) {
-      await botResponse("Invalid format. Please include `Pass: <password>` followed by `@person` mentions.", channelId);
+      await botResponse("Invalid format. Please include `Pass: <password>` followed by mentions (e.g., `@person`).", channelId);
       return;
     }
 
@@ -187,10 +195,13 @@ async function handleManagerMessage(event) {
       return;
     }
 
-    // Parse recipients (e.g., "@person1, @person2" -> ["person1", "person2"])
-    const recipientIds = recipientsText
-      .split(",")
-      .map((recipient) => recipient.trim().replace(/^@/, "")); // Remove "@" and trim spaces
+    // Extract all user IDs from <@USER_ID> format.
+    const recipientIds = [...recipientsText.matchAll(/<@([\w]+)>/g)].map((m) => m[1]);
+
+    if (recipientIds.length === 0) {
+      await botResponse("Please mention at least one recipient using @ (e.g., `@person`).", channelId);
+      return;
+    }
 
     // Fetch feedback for all specified recipients
     const feedbackRecords = await readAllFeedback();
