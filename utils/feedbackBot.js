@@ -266,17 +266,6 @@ async function handleManagerMessage(event) {
     // Wait 10 seconds and delete both the original message and the bot's response
     setTimeout(async () => {
       try {
-        // Delete the manager's request message
-        await slackClient.chat.delete({
-          channel: channelId,
-          ts: timestamp
-        });
-      } catch (error) {
-        console.error("Error deleting manager message:", error);
-        await botResponse(`Error deleting manager message, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message, channelId);
-      }
-
-      try {
         // Delete the bots response message
         await slackClient.chat.delete({
           channel: botResponseEvent.channel,
@@ -284,7 +273,8 @@ async function handleManagerMessage(event) {
         });
       } catch (error) {
         console.error("Error deleting messages:", error);
-        await botResponse(`Error deleting messages, please contact <@${await getSlackUserIdByEmail(process.env.ADMIN_EMAIL)}>: ` + error.message, channelId);
+        const adminId = await getSlackUserIdByEmail(process.env.ADMIN_EMAIL);
+        await botResponse(`Error deleting messages, please contact <@${adminId}>: ` + error.message, channelId);
       }
     }, 1000*60*10); // 10 minutes.
   } catch (error) {
