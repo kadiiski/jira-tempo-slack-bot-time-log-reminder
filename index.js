@@ -71,6 +71,31 @@ const birthdayCronJob = cron.schedule('0 9 * * 1', () => {
 });
 birthdayCronJob.start();
 
+const authenticate = (req, res) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Restricted Area"' });
+    res.end('Authentication required');
+    return false;
+  }
+
+  const base64Credentials = authHeader.split(' ')[1];
+  const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
+  const [username, password] = credentials.split(':');
+
+  // Replace these with your desired username and password or load from environment variables
+  const validUsername = process.env.AUTH_USER || 'admin';
+  const validPassword = process.env.AUTH_PASS || 'password';
+
+  if (username === validUsername && password === validPassword) {
+    return true;
+  } else {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return false;
+  }
+};
+
 // Create an HTTP server to display cron status and history
 const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/slack/commands') {
@@ -95,18 +120,30 @@ const server = http.createServer(async (req, res) => {
       }
     });
   } else if (req.url === '/run-time-log-cron') {
+    if (!authenticate(req, res)) {
+      return; // Stop further processing if authentication fails
+    }
+
     // Manually trigger the Time Log Reminder cron
     timeLogCronJob.now();
     debug('Time Log Reminder cron triggered manually!');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Time Log Reminder cron triggered manually');
   } else if (req.url === '/run-birthday-cron') {
+    if (!authenticate(req, res)) {
+      return; // Stop further processing if authentication fails
+    }
+
     // Manually trigger the Birthday cron
     birthdayCronJob.now();
     debug('Birthday cron triggered manually!');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Time Log Reminder cron triggered manually');
   } else {
+    if (!authenticate(req, res)) {
+      return; // Stop further processing if authentication fails
+    }
+
     // Display cron status and history
     const holidays = await getPublicHolidays();
     res.writeHead(200, { 'Content-Type': 'text/html' });

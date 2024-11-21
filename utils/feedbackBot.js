@@ -50,9 +50,9 @@ async function handleSlashCommand(body) {
   const { command, text, user_id, response_url } = body;
 
   // Route commands
-  if (command === "/feedback") {
+  if (command === "/give-feedback") {
     await handleGiveFeedbackCommand({ text, user_id, response_url });
-  } else if (command === "/manager") {
+  } else if (command === "/get-feedback") {
     await handleGetFeedbackCommand({ text, user_id, response_url });
   } else if (command === "/help") {
     await handleHelpCommand({ text, user_id, response_url });
@@ -63,44 +63,37 @@ async function handleSlashCommand(body) {
 
 async function handleHelpCommand({ text, user_id, response_url }) {
   await respondToSlashCommand(response_url, `
-    Hello! 👋 I’m here to help you manage feedback. Here’s what I can do:
-    :one: *Submit Feedback*:
-           - Share feedback about someone confidentially.
-           - *Format*: \`@recipient your feedback\`
-           - *Example*: \`@john_doe Great job on the project!\`
+    Hello! 👋 I’m here to help you manage feedback. Here’s what I can do:\n
+    :one: *Submit Feedback*:\n
+           - Share feedback about someone confidentially.\n
+           - *Format*: \`/give-feedback @recipient your feedback\`\n
+           - *Example*: \`/give-feedback @john_doe Great job on the project!\`\n
           
-     :two: *Retrieve Feedback (Managers Only)*:
-           - View feedback submitted for one or more people.
-           - *Format*: \`Pass: <password>, Feedback for @recipient1, @recipient2\`
-           - *Example*: \`Pass: secret123, Feedback for @john_doe, @jane_smith\`
+     :two: *Retrieve Feedback (Managers Only)*:\n
+           - View feedback submitted for one or more people.\n
+           - *Format*: \`\get-feedback <password> @recipient1, @recipient2...\`\n
+           - *Example*: \`\get-feedback secret123 @john_doe, @jane_smith\`\n
           
-     :three: *Delete all messages*:
-           - Delete everything I've sent you (clear our history).
-           - *Format*: \`delete all messages\`
-           - *Example*: \`delete all messages\`
+    :three: *Help*:\n
+           - Get this Kermit help message anytime.\n
+           - *Command*: \`\help\`\n
           
-    :four: *Help*:
-           - Get this help message anytime.
-           - *Command*: \`help\`
-          
-          💡 _Note: All messages sent to me are confidential and will be deleted after processing._
-          
-          If you have any questions, feel free to ask!
+          💡 _Note: All messages sent to me are confidential and will be deleted after processing._\n
   `);
 }
 
 async function handleGiveFeedbackCommand({ text, user_id, response_url }) {
   const author = await getSlackUserById(user_id); // Sender's Slack ID
 
-  // Parse message for recipient and feedback
-  const match = text.match(/^<@(\w+)>\s+(.+)/); // Format: <@recipient_id> feedback message
+// Parse message for recipient and feedback
+  const match = text.match(/^<@([A-Z0-9]+)(?:\|[^>]*)?>\s+(.+)/); // Match <@USER_ID>, <@USER_ID|>, <@USER_ID|name> with feedback
   if (!match) {
-    await respondToSlashCommand(response_url, "Please use the format: `@recipient your feedback`.");
+    await respondToSlashCommand(response_url,"Please use the format: `@recipient your feedback`.");
     return;
   }
 
-  const recipientId = match[1];
-  const feedback = match[2];
+  const recipientId = match[1]; // Extracts the recipient's Slack ID (e.g., U12345678)
+  const feedback = match[2];    // Extracts the feedback text
 
   if (!feedback) {
     await respondToSlashCommand(response_url,"Please include feedback after the recipient's name.");
@@ -134,23 +127,24 @@ async function handleGiveFeedbackCommand({ text, user_id, response_url }) {
 
 async function handleGetFeedbackCommand({ text, user_id, response_url }) {
   // Check if the message matches the expected format
-  const match = text.match(/pass:\s*(\S+).*?(<@[\w]+(?:>\s*[,<@]*[\w]*)*)/i); // Match "Pass: <password>" followed by mentions
+  const match = text.match(/^(\S+)\s+((?:<@[\w]+(?:\|[^>]*)?>[,\s]*|and\s*)+)/i); // Match "<password> <@USER_ID>"
+  // or "<password> <@USER_ID|display_name>"
   if (!match) {
-    await respondToSlashCommand(response_url, `Invalid format. Please include \`<password>\` followed by mentions \`@person\`.`);
+    await respondToSlashCommand(response_url, `Invalid format. Please include \`<password>\` followed by mentions like \`@person\`.`);
     return;
   }
 
-  const password = match[1];
-  const recipientsText = match[2];
+  const password = match[1]; // Extract the password
+  const recipientsText = match[2]; // Extract all mentions
 
-  // Validate the password
+// Validate the password
   if (password.trim().toLowerCase() !== process.env.MANAGER_PASSWORD.trim().toLowerCase()) {
     await respondToSlashCommand(response_url, "Invalid password. Access denied.");
     return;
   }
 
-  // Extract all user IDs from <@USER_ID> format.
-  const recipientIds = [...recipientsText.matchAll(/<@([\w]+)>/g)].map((m) => m[1]);
+// Extract all user IDs, matching both formats <@USER_ID> and <@USER_ID|display_name>
+  const recipientIds = [...recipientsText.matchAll(/<@([\w]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
 
   if (recipientIds.length === 0) {
     await respondToSlashCommand(response_url, "Please mention at least one recipient using @ (e.g., `@person`).");
@@ -167,7 +161,7 @@ async function handleGetFeedbackCommand({ text, user_id, response_url }) {
     const feedbackForRecipient = feedbackRecords.filter(record => record.recipient_slack_id === recipientId);
 
     if (feedbackForRecipient.length === 0) {
-      feedbackResponse += `No feedback found for <@${recipientId}>.\n`;
+      feedbackResponse += `No feedback found for <@${recipientId}>.\n\n`;
     } else {
       const feedbackMessages = feedbackForRecipient
         .map((record) => `• ${record.feedback}`)
