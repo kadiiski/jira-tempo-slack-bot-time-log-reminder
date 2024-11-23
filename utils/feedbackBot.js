@@ -1,11 +1,7 @@
 const {getSlackUserById} = require("./jira-utils");
-const {botResponse, getBotUserId, slackClient, respondToSlashCommand, respondToSlashCommandBlocks, botResponseBlocks,
-  replyToThread, handleDeleteHistory
-} = require("./slack-utils");
+const {botResponse, getBotUserId, slackClient, respondToSlashCommand, botResponseBlocks, replyToThread, deleteBotHistoryWithUser } = require("./slack-utils");
 const {encrypt} = require("./encrypt-utils");
-const {db, getAllFeedback, getFeedbackById, getThreadStateByThreadTs, insertFeedback, insertThreadState,
-  getFeedbackByRecipientId, getThreadStateByFeedbackId
-} = require("./sqlite-utils");
+const {getFeedbackById, getThreadStateByThreadTs, insertFeedback, insertThreadState, getFeedbackByRecipientId, getThreadStateByFeedbackId} = require("./sqlite-utils");
 
 // Handle Slash Commands
 async function handleSlashCommand(body) {
