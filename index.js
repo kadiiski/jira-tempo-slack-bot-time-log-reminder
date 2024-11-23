@@ -5,7 +5,7 @@ const executeCron = require('./utils/cron'); // For time logs reminders
 const executeBirthdayCron = require('./utils/birthdayCron'); // For birthday reminders
 const { debug } = require("./utils/debug");
 const { getPublicHolidays } = require("./utils/date");
-const { handleSlashCommand } = require("./utils/feedbackBot");
+const { handleSlashCommand, handleFeedbackDiscussion, handleSlackEvent } = require("./utils/feedbackBot");
 
 dotenv.config();
 dotenv.config({ path: `.env.local`, override: true });
@@ -107,14 +107,66 @@ const server = http.createServer(async (req, res) => {
         const params = new URLSearchParams(body);
         const slackCommand = Object.fromEntries(params.entries());
 
-        // Pass the command data to the handler
-        await handleSlashCommand(slackCommand);
+        // Pass the command data to the handler.
+        // Execute this one asynchronously to avoid blocking the response.
+        handleSlashCommand(slackCommand).then();
 
         // Respond to Slack to acknowledge the command
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end();
       } catch (error) {
         console.error('Error processing Slash Command:', error);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      }
+    });
+  } else if (req.method === 'POST' && req.url === '/slack/actions') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        // Parse the body as JSON
+        const payload = JSON.parse(body);
+
+        // Handle the payload action
+        const action = payload.actions[0]; // Assuming one action per payload
+        if (action.action_id.startsWith('discuss_feedback_')) {
+          // Execute this one asynchronously to avoid blocking the response.
+          handleFeedbackDiscussion(payload, action).then();
+        }
+
+        // Acknowledge the action
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end();
+      } catch (error) {
+        console.error('Error processing Slack action:', error);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      }
+    });
+  } else if (req.method === 'POST' && req.url === '/slack/events') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body);
+
+        // Respond to Slack immediately to acknowledge the event
+        if (payload.type === 'url_verification') {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(payload.challenge); // Verification handshake
+          return;
+        }
+
+        if (payload.type === 'event_callback') {
+          // Execute this one asynchronously to avoid blocking the response.
+          handleSlackEvent(payload.event).then();
+        }
+
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end();
+      } catch (error) {
+        console.error('Error processing Slack event:', error);
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('Internal Server Error');
       }

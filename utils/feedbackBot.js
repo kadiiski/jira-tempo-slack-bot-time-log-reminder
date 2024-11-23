@@ -1,49 +1,11 @@
-const { WebClient } = require("@slack/web-api");
-const sqlite3 = require("sqlite3").verbose();
-const crypto = require("crypto");
-const {getSlackUserById, getSlackUserIdByEmail} = require("./jira-utils");
-const axios = require("axios");
-const {botResponse, getBotUserId, slackClient, respondToSlashCommand} = require("./slack-utils");
-
-// Environment variables
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY; // 32 characters for AES-256
-if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) {
-  throw new Error('Encryption key must be exactly 32 characters long.');
-}
-
-// Initialize SQLite database
-const db = new sqlite3.Database("./feedback.db", (err) => {
-  if (err) {
-    console.error("Error opening database:", err.message);
-  } else {
-    console.log("Connected to SQLite database.");
-    db.run(`
-      CREATE TABLE IF NOT EXISTS feedback (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        author_email TEXT NOT NULL,
-        author_slack_id TEXT NOT NULL,
-        recipient_email TEXT NOT NULL,
-        recipient_slack_id TEXT NOT NULL,
-        feedback TEXT NOT NULL
-      );
-    `);
-  }
-});
-
-// Encryption helper
-const encrypt = (text) => {
-  const cipher = crypto.createCipheriv("aes-256-ctr", ENCRYPTION_KEY, Buffer.alloc(16, 0));
-  const encrypted = Buffer.concat([cipher.update(text), cipher.final()]);
-  return encrypted.toString("hex");
-};
-
-// Decryption helper
-const decrypt = (encryptedText) => {
-  const decipher = crypto.createDecipheriv("aes-256-ctr", ENCRYPTION_KEY, Buffer.alloc(16, 0));
-  const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedText, "hex")), decipher.final()]);
-  return decrypted.toString();
-};
+const {getSlackUserById} = require("./jira-utils");
+const {botResponse, getBotUserId, slackClient, respondToSlashCommand, respondToSlashCommandBlocks, botResponseBlocks,
+  replyToThread, handleDeleteHistory
+} = require("./slack-utils");
+const {encrypt} = require("./encrypt-utils");
+const {db, getAllFeedback, getFeedbackById, getThreadStateByThreadTs, insertFeedback, insertThreadState,
+  getFeedbackByRecipientId, getThreadStateByFeedbackId
+} = require("./sqlite-utils");
 
 // Handle Slash Commands
 async function handleSlashCommand(body) {
@@ -54,6 +16,10 @@ async function handleSlashCommand(body) {
     await handleGiveFeedbackCommand({ text, user_id, response_url });
   } else if (command === "/get-feedback") {
     await handleGetFeedbackCommand({ text, user_id, response_url });
+  } else if (command === "/delete-history") {
+    // Delete all messages from the bot
+    await respondToSlashCommand(response_url, "Fine, I will delete all my messages. ;)");
+    await deleteBotHistoryWithUser(user_id);
   } else if (command === "/help") {
     await handleHelpCommand({ text, user_id, response_url });
   } else {
@@ -68,17 +34,24 @@ async function handleHelpCommand({ text, user_id, response_url }) {
            - Share feedback about someone confidentially.\n
            - *Format*: \`/give-feedback @recipient your feedback\`\n
            - *Example*: \`/give-feedback @john_doe Great job on the project!\`\n
-          
-     :two: *Retrieve Feedback (Managers Only)*:\n
+    💡 _Note: you can do this anywhere, in any chat, any time, it will only be seen by you as it's ephemeral messaging. If you have any doubts - do it in your own DMs or with me._
+    
+    :two: *Retrieve Feedback (Managers Only)*:\n
            - View feedback submitted for one or more people.\n
            - *Format*: \`\get-feedback <password> @recipient1, @recipient2...\`\n
            - *Example*: \`\get-feedback secret123 @john_doe, @jane_smith\`\n
+    💡 _Note: you can do this anywhere, in any chat, any time, it will only be seen by you as it's ephemeral messaging. If you have any doubts - do it in your own DMs or with me._
           
-    :three: *Help*:\n
+    :four: *Delete all my messages*:\n
+           - I will delete all my personal correspondence with you.\n
+           - *Command*: \`\delete-history\`\n
+          
+    :five: *Help*:\n
            - Get this Kermit help message anytime.\n
            - *Command*: \`\help\`\n
           
-          💡 _Note: All messages sent to me are confidential and will be deleted after processing._\n
+    💡 _Note: All messages sent to me are confidential and will be deleted after processing. No names and emails are being saved and feedback is encrypted_\n\n
+    :tea_kermit: _Managers can also initiate a confidential & anonymous discussion about specific feedback item, Kermit will act as a middle man to convey the messages and keep both parties anonymous. When this happens a private thread will be initiated in both people DM chats with Kermit, where they can communicate in the thread._
   `);
 }
 
@@ -108,25 +81,20 @@ async function handleGiveFeedbackCommand({ text, user_id, response_url }) {
 
   // Encrypt and save to database
   const encryptedFeedback = encrypt(feedback);
-  const now = new Date().toISOString();
 
-  db.run(
-    `INSERT INTO feedback (date, author_email, author_slack_id, recipient_email, recipient_slack_id, feedback) VALUES (?, ?, ?, ?, ?, ?)`,
-    [now, author.profile.email, author.id, recipient.profile.email, recipient.id, encryptedFeedback],
-    async (err) => {
-      if(err) {
-        console.error("Error saving feedback:", err.message);
-        await respondToSlashCommand(response_url,"Something went wrong. Please try again later. Error: " + err.message);
-      }
-    }
-  );
+  try {
+    await insertFeedback(author.id, recipient.id, encryptedFeedback);
+  } catch (error) {
+    console.error("Error saving feedback:", error);
+    await respondToSlashCommand(response_url, "Something went wrong. Please try again later. Error: " + error.message);
+  }
 
   // Confirm message was saved.
   await respondToSlashCommand(response_url, `Your feedback has been saved and will remain confidential. Thank you!`);
 }
 
 async function handleGetFeedbackCommand({ text, user_id, response_url }) {
-  // Check if the message matches the expected format
+  // Check if the message matches the expected format.
   const match = text.match(/^(\S+)\s+((?:<@[\w]+(?:\|[^>]*)?>[,\s]*|and\s*)+)/i); // Match "<password> <@USER_ID>"
   // or "<password> <@USER_ID|display_name>"
   if (!match) {
@@ -137,14 +105,18 @@ async function handleGetFeedbackCommand({ text, user_id, response_url }) {
   const password = match[1]; // Extract the password
   const recipientsText = match[2]; // Extract all mentions
 
-// Validate the password
+  // Validate the password
   if (password.trim().toLowerCase() !== process.env.MANAGER_PASSWORD.trim().toLowerCase()) {
     await respondToSlashCommand(response_url, "Invalid password. Access denied.");
     return;
   }
 
-// Extract all user IDs, matching both formats <@USER_ID> and <@USER_ID|display_name>
-  const recipientIds = [...recipientsText.matchAll(/<@([\w]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
+  // Extract all user IDs, matching both formats <@USER_ID> and <@USER_ID|display_name>
+  const recipientIds = [...recipientsText.matchAll(/<@([\w]+)(?:\|[^>]*)?>/g)]
+    // Get the proper match for the IDs.
+    .map(m => m[1])
+    // Remove duplicates.
+    .filter((value, index, array) => array.indexOf(value) === index);
 
   if (recipientIds.length === 0) {
     await respondToSlashCommand(response_url, "Please mention at least one recipient using @ (e.g., `@person`).");
@@ -153,98 +125,276 @@ async function handleGetFeedbackCommand({ text, user_id, response_url }) {
 
   await respondToSlashCommand(response_url, "I will DM you! ;)");
 
-  // Fetch feedback for all specified recipients
-  const feedbackRecords = await getAllFeedback();
-  let feedbackResponse = "*NOTE: This message will self delete after 5 minutes.*\n\n";
+  const blocks = [];
 
   for (const recipientId of recipientIds) {
-    const feedbackForRecipient = feedbackRecords.filter(record => record.recipient_slack_id === recipientId);
+    const feedbackForRecipient = await getFeedbackByRecipientId(recipientId);
 
     if (feedbackForRecipient.length === 0) {
-      feedbackResponse += `No feedback found for <@${recipientId}>.\n\n`;
-    } else {
-      const feedbackMessages = feedbackForRecipient
-        .map((record) => `• ${record.feedback}`)
-        .join("\n");
-
-      feedbackResponse += `Feedback for <@${recipientId}>:\n${feedbackMessages}\n\n`;
-    }
-  }
-
-  const gptPrompt = `I'll give you list of employee feedback for some people. 
-    - Summarize the feedback for every person separately.
-    - Add some conclusions for each person separately.
-    - Add some short goals to become better employee as well, based on the feedback.
-    - Return the response formatted as a plain slack message.
-    - Do not use other text formatting other than * for bold, and _ for italic.
-    - Do not use emojis.
-    Here is the feedback: ${feedbackResponse}
-    `
-
-  try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4-turbo',
-        temperature: 1,
-        messages: [
-          { role: 'user', content: gptPrompt },
-        ],
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `No feedback found for <@${recipientId}>.`
         }
-      }
-    );
+      });
+    } else {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `Feedback for <@${recipientId}>:`
+        }
+      });
 
-    // Extract the message content from the response
-    const gptResponse = response.data.choices[0].message.content;
-    // Check if there is a message returned
-    if (gptResponse) {
-      feedbackResponse += `\n\n*Here is a summary:*\n${gptResponse}`;
+      for (const record of feedbackForRecipient) {
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `• ${record.feedback}`
+          },
+          accessory: {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Discuss"
+            },
+            action_id: `discuss_feedback_${record.id}`
+          }
+        });
+      }
     }
-  } catch (error) {
-    console.error('Error making API request:', error);
+
+    blocks.push({
+      type: "divider"
+    });
   }
 
-  const botResponseEvent = await botResponse(feedbackResponse.trim(), user_id);
-
-  // Wait 10 seconds and delete both the original message and the bot's response
-  setTimeout(async () => {
-    try {
-      // Delete the bots response message
-      await slackClient.chat.delete({
-        channel: botResponseEvent.channel,
-        ts: botResponseEvent.message.ts
-      });
-    } catch (error) {
-      console.error("Error deleting messages:", error);
-      const adminId = await getSlackUserIdByEmail(process.env.ADMIN_EMAIL);
-      await botResponse(`Error deleting messages, please contact <@${adminId}>: ` + error.message, user_id);
-    }
-  }, 1000*60*5); // 5 minutes.
+  await botResponseBlocks(blocks, "Here is the feedback:", user_id);
 }
 
-const getAllFeedback = async () => {
-  const query = `SELECT * FROM feedback`;
+async function handleFeedbackDiscussion(payload, action) {
+  const { user, message } = payload;
+  const managerSlackId = user.id; // The manager initiating the discussion
+  const feedbackId = action.action_id.split('discuss_feedback_')[1]; // Extract the feedback ID
 
-  return new Promise((resolve, reject) => {
-    db.all(query, [], (err, rows) => {
-      if (err) {
-        console.error('Error reading feedback records:', err.message);
-        reject(err);
-      } else {
-        // Decrypt feedback for each row
-        const decryptedRows = rows.map(row => ({
-          ...row,
-          feedback: decrypt(row.feedback) // Decrypt the feedback
-        }));
-        resolve(decryptedRows);
+  // Retrieve the feedback details from the database
+  const feedbackRecord = await getFeedbackById(feedbackId);
+
+  if (!feedbackRecord) {
+    console.error('Feedback not found for ID:', feedbackId);
+    await botResponse(`Sorry, but I can't find the feedback for ID: ${feedbackId}, couldn't initiate a discussion.`, managerSlackId);
+    return;
+  }
+
+  const { author_slack_id, feedback, recipient_slack_id } = feedbackRecord;
+
+  // Check if the thread already exist for this same feedback, author and manager.
+  const threadStates = await getThreadStateByFeedbackId(feedbackId, author_slack_id, managerSlackId);
+  if (threadStates.length > 0) {
+    const threadState = threadStates[0];
+    const existingDiscussionBlocks = [
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: '_Further discussion requested._'
+        }]
       }
-    });
-  });
-};
+    ];
+    const {author_slack_id, manager_slack_id, author_thread_ts, manager_thread_ts} = threadState
 
-module.exports = {handleSlashCommand};
+    await replyToThread({
+      message: `Further discussion requested.`,
+      blocks: existingDiscussionBlocks,
+      channel: author_slack_id,
+      thread_ts: author_thread_ts
+    });
+    await replyToThread({
+      message: `Further discussion requested.`,
+      blocks: existingDiscussionBlocks,
+      channel: manager_slack_id,
+      thread_ts: manager_thread_ts
+    });
+    return;
+  }
+
+  const blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `Anonymous discussion initiated about <@${recipient_slack_id}> feedback:\n _${feedback}_`
+      }
+    },
+    {
+      type: 'divider'
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: 'You can reply here to communicate anonymously. Kermit will be your middle man.'
+        }
+      ]
+    }
+  ];
+
+  // Start the discussion thread
+  const managerThread = await slackClient.chat.postMessage({
+    channel: managerSlackId,
+    text: `Anonymous discussion about <@${recipient_slack_id}> feedback:\n\n"${feedback}"`,
+    blocks: blocks,
+  });
+
+  // Send an initial message to the author
+  const authorThread = await slackClient.chat.postMessage({
+    channel: author_slack_id,
+    text: `Your manager has questions about your feedback:\n\n"${feedback}"`,
+    blocks: blocks,
+  });
+
+  await insertThreadState(feedbackId, managerThread.ts, authorThread.ts, managerSlackId, author_slack_id);
+}
+
+// async function handleGetFeedbackCommand({ text, user_id, response_url }) {
+//   // Check if the message matches the expected format
+//   const match = text.match(/^(\S+)\s+((?:<@[\w]+(?:\|[^>]*)?>[,\s]*|and\s*)+)/i); // Match "<password> <@USER_ID>"
+//   // or "<password> <@USER_ID|display_name>"
+//   if (!match) {
+//     await respondToSlashCommand(response_url, `Invalid format. Please include \`<password>\` followed by mentions like \`@person\`.`);
+//     return;
+//   }
+//
+//   const password = match[1]; // Extract the password
+//   const recipientsText = match[2]; // Extract all mentions
+//
+// // Validate the password
+//   if (password.trim().toLowerCase() !== process.env.MANAGER_PASSWORD.trim().toLowerCase()) {
+//     await respondToSlashCommand(response_url, "Invalid password. Access denied.");
+//     return;
+//   }
+//
+// // Extract all user IDs, matching both formats <@USER_ID> and <@USER_ID|display_name>
+//   const recipientIds = [...recipientsText.matchAll(/<@([\w]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
+//
+//   if (recipientIds.length === 0) {
+//     await respondToSlashCommand(response_url, "Please mention at least one recipient using @ (e.g., `@person`).");
+//     return;
+//   }
+//
+//   await respondToSlashCommand(response_url, "I will DM you! ;)");
+//
+//   // Fetch feedback for all specified recipients
+//   const feedbackRecords = await getAllFeedback();
+//   let feedbackResponse = "*NOTE: This message will self delete after 5 minutes.*\n\n";
+//
+//   for (const recipientId of recipientIds) {
+//     const feedbackForRecipient = feedbackRecords.filter(record => record.recipient_slack_id === recipientId);
+//
+//     if (feedbackForRecipient.length === 0) {
+//       feedbackResponse += `No feedback found for <@${recipientId}>.\n\n`;
+//     } else {
+//       const feedbackMessages = feedbackForRecipient
+//         .map((record) => `• ${record.feedback}`)
+//         .join("\n");
+//
+//       feedbackResponse += `Feedback for <@${recipientId}>:\n${feedbackMessages}\n\n`;
+//     }
+//   }
+//
+//   const gptPrompt = `I'll give you list of employee feedback for some people.
+//     - Summarize the feedback for every person separately.
+//     - Add some conclusions for each person separately.
+//     - Add some short goals to become better employee as well, based on the feedback.
+//     - Return the response formatted as a plain slack message.
+//     - Do not use other text formatting other than * for bold, and _ for italic.
+//     - Do not use emojis.
+//     Here is the feedback: ${feedbackResponse}
+//     `
+//
+//   try {
+//     const response = await axios.post(
+//       'https://api.openai.com/v1/chat/completions',
+//       {
+//         model: 'gpt-4-turbo',
+//         temperature: 1,
+//         messages: [
+//           { role: 'user', content: gptPrompt },
+//         ],
+//       },
+//       {
+//         headers: {
+//           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+//           'Content-Type': 'application/json'
+//         }
+//       }
+//     );
+//
+//     // Extract the message content from the response
+//     const gptResponse = response.data.choices[0].message.content;
+//     // Check if there is a message returned
+//     if (gptResponse) {
+//       feedbackResponse += `\n\n*Here is a summary:*\n${gptResponse}`;
+//     }
+//   } catch (error) {
+//     console.error('Error making API request:', error);
+//   }
+//
+//   const botResponseEvent = await botResponse(feedbackResponse.trim(), user_id);
+//
+//   // Wait 10 seconds and delete both the original message and the bot's response
+//   setTimeout(async () => {
+//     try {
+//       // Delete the bots response message
+//       await slackClient.chat.delete({
+//         channel: botResponseEvent.channel,
+//         ts: botResponseEvent.message.ts
+//       });
+//     } catch (error) {
+//       console.error("Error deleting messages:", error);
+//       const adminId = await getSlackUserIdByEmail(process.env.ADMIN_EMAIL);
+//       await botResponse(`Error deleting messages, please contact <@${adminId}>: ` + error.message, user_id);
+//     }
+//   }, 1000*60*5); // 5 minutes.
+// }
+
+async function handleSlackEvent(event) {
+  if (event.type === 'message' && event.thread_ts) {
+    const botUserId = await getBotUserId();
+    if (event.user === botUserId) {
+      return; // Ignore messages from the bot
+    }
+
+    const threadState = await getThreadStateByThreadTs(event.thread_ts);
+    if (!threadState) {
+      console.log('No active thread found for this message.');
+      return;
+    }
+
+    const { manager_slack_id, author_slack_id, author_thread_ts, manager_thread_ts } = threadState;
+
+    if (event.user === manager_slack_id && event.thread_ts === manager_thread_ts) {
+      // Manager sent a message, forward it to the author's thread
+      await replyToThread({
+        message: event.text,
+        channel: author_slack_id,
+        thread_ts: author_thread_ts
+      });
+    } else if (event.user === author_slack_id && event.thread_ts === author_thread_ts) {
+      // Author sent a message, forward it to the manager's thread
+      await replyToThread({
+        message: event.text,
+        channel: manager_slack_id,
+        thread_ts: manager_thread_ts
+      });
+    } else {
+      console.log('Message from an unexpected user or thread received.', event);
+      await botResponse(`Unexpected message received or I couldn't find the thread. Contact the app admin. Here are some details: \`\`\`${JSON.stringify(event)}\`\`\``, manager_slack_id);
+    }
+  }
+}
+
+module.exports = {handleSlashCommand, handleFeedbackDiscussion, handleSlackEvent};
