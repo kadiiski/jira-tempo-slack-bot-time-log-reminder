@@ -38,11 +38,7 @@ async function handleHelpCommand({ text, user_id, response_url }) {
            - *Example*: \`\get-feedback secret123 @john_doe, @jane_smith\`\n
     💡 _Note: you can do this anywhere, in any chat, any time, it will only be seen by you as it's ephemeral messaging. If you have any doubts - do it in your own DMs or with me._
           
-    :four: *Delete all my messages*:\n
-           - I will delete all my personal correspondence with you.\n
-           - *Command*: \`\delete-history\`\n
-          
-    :five: *Help*:\n
+    :three: *Help*:\n
            - Get this Kermit help message anytime.\n
            - *Command*: \`\help\`\n
           
@@ -139,16 +135,25 @@ async function handleGetFeedbackCommand({ text, user_id, response_url }) {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `Feedback for <@${recipientId}>:`
+          text: `*Feedback for <@${recipientId}>:*`
         }
       });
 
       for (const record of feedbackForRecipient) {
+        // Convert the string to a Date object
+        const date = new Date(record.date);
+        // Extract the day, month, and year
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+        const year = date.getFullYear();
+        // Format the date as DD/MM/YYYY
+        const formattedDate = `${day}/${month}/${year}`;
+
         blocks.push({
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `• ${record.feedback}`
+            text: `*${formattedDate}*\n _${record.feedback}_`
           },
           accessory: {
             type: "button",
@@ -185,7 +190,6 @@ async function handleFeedbackDiscussion(payload, action) {
   }
 
   const { author_slack_id, feedback, recipient_slack_id } = feedbackRecord;
-
   // Check if the thread already exist for this same feedback, author and manager.
   const threadStates = await getThreadStateByFeedbackId(feedbackId, author_slack_id, managerSlackId);
   if (threadStates.length > 0) {
@@ -216,14 +220,7 @@ async function handleFeedbackDiscussion(payload, action) {
     return;
   }
 
-  const blocks = [
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `Anonymous discussion initiated about <@${recipient_slack_id}> feedback:\n _${feedback}_`
-      }
-    },
+  const sharedBlocks = [
     {
       type: 'divider'
     },
@@ -232,24 +229,58 @@ async function handleFeedbackDiscussion(payload, action) {
       elements: [
         {
           type: 'mrkdwn',
-          text: 'You can reply here to communicate anonymously. Kermit will be your middle man.'
+          text: 'You can reply to this message to communicate anonymously. Kermit will be your middle man.'
         }
       ]
     }
+  ]
+
+  const recipientSlackUser = await getSlackUserById(recipient_slack_id);
+
+  const managerBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Anonymous discussion about <@${recipient_slack_id}> feedback:*\n _${feedback}_`
+      },
+      accessory: {
+        type: "image",
+        image_url: recipientSlackUser ? recipientSlackUser.profile.image_original : null,
+        alt_text: recipientSlackUser ? recipientSlackUser.profile.real_name : "User Image"
+      }
+    },
+    ...sharedBlocks
+  ];
+
+  const authorBlocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Your manager requested anonymous discussion about feedback you submitted for <@${recipient_slack_id}>:*\n _${feedback}_`
+      },
+      accessory: {
+        type: "image",
+        image_url: recipientSlackUser ? recipientSlackUser.profile.image_original : null,
+        alt_text: recipientSlackUser ? recipientSlackUser.profile.real_name : "User Image"
+      }
+    },
+    ...sharedBlocks
   ];
 
   // Start the discussion thread
   const managerThread = await slackClient.chat.postMessage({
     channel: managerSlackId,
     text: `Anonymous discussion about <@${recipient_slack_id}> feedback:\n\n"${feedback}"`,
-    blocks: blocks,
+    blocks: managerBlocks,
   });
 
   // Send an initial message to the author
   const authorThread = await slackClient.chat.postMessage({
     channel: author_slack_id,
-    text: `Your manager has questions about your feedback:\n\n"${feedback}"`,
-    blocks: blocks,
+    text: `Your manager requested anonymous discussion about feedback you submitted for:\n\n"${feedback}"`,
+    blocks: authorBlocks,
   });
 
   await insertThreadState(feedbackId, managerThread.ts, authorThread.ts, managerSlackId, author_slack_id);
