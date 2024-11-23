@@ -125,8 +125,9 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => body += chunk.toString());
     req.on('end', async () => {
       try {
-        // Parse the body as JSON
-        const payload = JSON.parse(body);
+        // Decode the URL-encoded payload
+        const params = new URLSearchParams(body);
+        const payload = JSON.parse(params.get('payload')); // Decode and parse the payload
 
         // Handle the payload action
         const action = payload.actions[0]; // Assuming one action per payload
