@@ -64,6 +64,7 @@ async function getBirthdayMessage() {
     - Format the message well so that it is clearly visible who, when and what is celebrating.
     - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
     - This message will be directly sent to the team. So make it final - no placeholders.
+    - Use official slack formatting for like *bold*, _italic_, ~strike~ etc.
     Here is the message: ${JSON.stringify(celebrationMessage)}
     `;
 
@@ -72,6 +73,7 @@ async function getBirthdayMessage() {
         - Current date and time is ${getCurrentDateTime()}.
         - Do not return emails in the response.
         - This message will be directly sent to the team. So make it final - no placeholders.
+        - Use official slack formatting for like *bold*, _italic_, ~strike~ etc.
         - Additional instructions: ${BIRTHDAY_MSG_INSTRUCTIONS}
         `;
 
