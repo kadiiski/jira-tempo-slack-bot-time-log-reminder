@@ -181,7 +181,7 @@ const server = http.createServer(async (req, res) => {
     timeLogCronJob.now();
     debug('Time Log Reminder cron triggered manually!');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Time Log Reminder cron triggered manually');
+    res.end('Birthday cron triggered manually');
   } else if (req.url === '/run-birthday-cron') {
     if (!authenticate(req, res)) {
       return; // Stop further processing if authentication fails
