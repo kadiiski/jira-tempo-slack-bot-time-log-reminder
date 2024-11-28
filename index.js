@@ -221,6 +221,7 @@ const server = http.createServer(async (req, res) => {
         
         <h2>Time Log Reminder Cron <a href="/run-time-log-cron" target="_blank">[RUN NOW]</a></h2>
         <p><strong>Status:</strong> <span class="status-${cronStatus.timeLogs === 'Success' ? 'success' : 'failed'}">${cronStatus.timeLogs}</span></p>
+        <p><strong>Debug:</strong> ${process.env.DEBUG === 'true' ? 'ON' : 'OFF'}</p>
         <p><strong>Last Run:</strong> ${lastRunTime.timeLogs}</p>
         <table>
           <tr><th>Timestamp</th><th>Status</th><th>Details</th></tr>
