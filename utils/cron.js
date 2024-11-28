@@ -107,6 +107,7 @@ async function getTimeLogsMessage(message) {
       - The message must be properly formatted for slack.
       - Use properly :first_place_medal:, :second_place_medal:, :third_place_medal: emojis.
       - Use only slack emojis that you are sure exist.
+      - Do not use other text formatting other than * for bold, and _ for italic.
       - Respect the gender of the names and write them in the proper language.
       - Remove the emails, they are just so you know the gender and name of the person.
       - You can also use the names of the people to make jokes or puns.
