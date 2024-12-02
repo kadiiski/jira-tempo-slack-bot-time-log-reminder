@@ -5,13 +5,11 @@ const executeCron = require('./utils/cron'); // For time logs reminders
 const executeBirthdayCron = require('./utils/birthdayCron'); // For birthday reminders
 const { debug } = require("./utils/debug");
 const { getPublicHolidays } = require("./utils/date");
-const { handleSlashCommand, handleFeedbackDiscussion, handleSlackEvent } = require("./utils/feedbackBot");
 
 dotenv.config();
 dotenv.config({ path: `.env.local`, override: true });
 
 // Initial status and history setup for both cron jobs
-const currentTime = new Date().toLocaleString();
 let cronStatus = { timeLogs: 'online', birthday: 'online' };
 let lastRunTime = { timeLogs: 'never', birthday: 'never' };
 const cronHistory = { timeLogs: [], birthday: [] };
@@ -54,7 +52,7 @@ const timeLogCronJob = cron.schedule(process.env.CRON_TIME, () => {
 timeLogCronJob.start();
 
 // Birthday Reminder Cron (runs every Monday at 9:00 AM)
-const birthdayCronJob = cron.schedule('0 9 * * 1', () => {
+const birthdayCronJob = cron.schedule('0 7 * * 1', () => {
   debug('Starting Birthday Reminder Cron...');
   executeBirthdayCron()
     .then(() => {
@@ -98,81 +96,7 @@ const authenticate = (req, res) => {
 
 // Create an HTTP server to display cron status and history
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'POST' && req.url === '/slack/commands') {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', async () => {
-      try {
-        // Parse the x-www-form-urlencoded body
-        const params = new URLSearchParams(body);
-        const slackCommand = Object.fromEntries(params.entries());
-
-        // Pass the command data to the handler.
-        // Execute this one asynchronously to avoid blocking the response.
-        handleSlashCommand(slackCommand).then();
-
-        // Respond to Slack to acknowledge the command
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end();
-      } catch (error) {
-        console.error('Error processing Slash Command:', error);
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal Server Error');
-      }
-    });
-  } else if (req.method === 'POST' && req.url === '/slack/actions') {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', async () => {
-      try {
-        // Decode the URL-encoded payload
-        const params = new URLSearchParams(body);
-        const payload = JSON.parse(params.get('payload')); // Decode and parse the payload
-
-        // Handle the payload action
-        const action = payload.actions[0]; // Assuming one action per payload
-        if (action.action_id.startsWith('discuss_feedback_')) {
-          // Execute this one asynchronously to avoid blocking the response.
-          handleFeedbackDiscussion(payload, action).then();
-        }
-
-        // Acknowledge the action
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end();
-      } catch (error) {
-        console.error('Error processing Slack action:', error);
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal Server Error');
-      }
-    });
-  } else if (req.method === 'POST' && req.url === '/slack/events') {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body);
-
-        // Respond to Slack immediately to acknowledge the event
-        if (payload.type === 'url_verification') {
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end(payload.challenge); // Verification handshake
-          return;
-        }
-
-        if (payload.type === 'event_callback') {
-          // Execute this one asynchronously to avoid blocking the response.
-          handleSlackEvent(payload.event).then();
-        }
-
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end();
-      } catch (error) {
-        console.error('Error processing Slack event:', error);
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Internal Server Error');
-      }
-    });
-  } else if (req.url === '/run-time-log-cron') {
+  if (req.url === '/run-time-log-cron') {
     if (!authenticate(req, res)) {
       return; // Stop further processing if authentication fails
     }
@@ -216,7 +140,7 @@ const server = http.createServer(async (req, res) => {
       </head>
       <body>
         <h1>Cron Job Status</h1>
-        <p><strong>Current Time:</strong> ${currentTime}</p>
+        <p><strong>Current Time:</strong> ${new Date().toLocaleString()}</p>
         <p><strong>Public Holidays:</strong> ${holidays.join(', ')}</p>
         
         <h2>Time Log Reminder Cron <a href="/run-time-log-cron" target="_blank">[RUN NOW]</a></h2>
