@@ -95,12 +95,13 @@ async function executeCron() {
   // Send the channel message.
   debug(`Sending channel message:`, winnersMessage)
 
-  const channelMessage = await getTimeLogsMessage(winnersMessage);
+  // const channelMessage = await getGptTimeLogsMessage(winnersMessage);
+  const channelMessage = winnersMessage;
 
   await sendSlackMessage(SLACK_CHANNEL_ID, channelMessage)
 }
 
-async function getTimeLogsMessage(message) {
+async function getGptTimeLogsMessage(message) {
   const gptPrompt = `I'll give you a message that we put out for everyone who hasn't logged in their hours in Jira.
       - We've made it as a fun reminder message, in the form of "winners" who haven't, to remind them. Make it fun and goofy!
       - The names of the people are slack user IDs, so don't change them.
