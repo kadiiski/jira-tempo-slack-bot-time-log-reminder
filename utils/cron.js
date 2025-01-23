@@ -70,8 +70,8 @@ async function executeCron() {
   const winnerGroups = Object.fromEntries(winners.map(winner => [winner.notLoggedDays, []]))
 
   // Build winners groups.
-  winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(`${item.slackUserId} (${item.email})`))
-  // winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
+  // winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(`${item.slackUserId} (${item.email})`))
+  winners.map((item, index) => winnerGroups?.[item?.notLoggedDays].push(item.slackUserId))
 
   const winnersMessage = Object.keys(winnerGroups).sort((a,b) => b - a).map((count, index) => {
     const people = winnerGroups?.[count].map(slackId => `<@${slackId}>`)
