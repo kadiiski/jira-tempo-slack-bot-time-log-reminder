@@ -84,6 +84,7 @@ const getPublicHolidays = (() => {
     let easterSunday = await getEaster(year);
     let publicHolidays = [
       `${year}-01-01`,
+      "2026-01-02", // Exception 2026 related to euro adoption.
       `${year}-03-03`,
       incrementFormattedDate(easterSunday, -2), // Good Friday.
       incrementFormattedDate(easterSunday, +1), // Easter Monday.
